@@ -1,7 +1,7 @@
 import { API_URL } from './config.js';
 
 export async function fetchClientMonthly() {
-  const res = await fetch(`${API_URL}?action=clientMonthly`, { redirect: 'follow' });
+  const res = await fetch(`${API_URL}?action=clientMonthly&withBranches=1`, { redirect: 'follow' });
   if (!res.ok) throw new Error(`فشل الاتصال بالسيرفر (HTTP ${res.status})`);
   const text = await res.text();
   let data;

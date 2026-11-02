@@ -3,7 +3,7 @@ import { fetchClientMonthly } from './api.js';
 import { demoData } from './demo.js';
 import { managementSummary } from './lib/summary.js';
 import {
-  LEVELS, MONTH_AR, MONTH_ORDER, evaluateAllMonths, evaluateMonth,
+  LEVELS, MONTH_AR, MONTH_ORDER, evaluateAllMonths, evaluateBranches, evaluateMonth,
 } from './lib/quality.js';
 
 const pct = (v, d = 1) => (v === null || v === undefined ? '—' : `${v.toFixed(d)}%`);
@@ -180,6 +180,61 @@ function SummaryBox({ text }) {
   );
 }
 
+function BranchesTable({ rows, result, hasData }) {
+  const [q, setQ] = useState('');
+  const [sort, setSort] = useState({ key: 'delta', dir: 'desc' });
+  const list = useMemo(() => rows.filter((r) => !q || r.branch.includes(q.trim())).sort((a, b) => {
+    const A = a[sort.key], B = b[sort.key];
+    const c = typeof A === 'string' ? A.localeCompare(B, 'ar') : A - B;
+    return sort.dir === 'asc' ? c : -c;
+  }), [rows, q, sort]);
+  if (!hasData) return <div className="alert warn">بيانات الفروع مش موجودة في رد السيرفر. اعمل Deploy جديد لـ <code>Code.gs</code> المحدّث (فيه <code>withBranches</code>) في Apps Script.</div>;
+  const th = (key, label) => (
+    <th onClick={() => setSort((s) => ({ key, dir: s.key === key && s.dir === 'desc' ? 'asc' : 'desc' }))} className="sortable">
+      {label}{sort.key === key ? (sort.dir === 'desc' ? ' ▼' : ' ▲') : ''}
+    </th>
+  );
+  const tot = rows.reduce((s, r) => ({ t: s.t + r.curTotal, ok: s.ok + r.curSuccess }), { t: 0, ok: 0 });
+  return (
+    <>
+      <div className="toolbar"><input placeholder="ابحث باسم الفرع…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              {th('branch', 'الفرع')}
+              {th('customers', 'عدد العملاء')}
+              {th('baseline', `متوسط التسليمات (${result.prev.map((m) => MONTH_AR[m]).join(' + ')})`)}
+              {th('current', `متوسط التسليمات ${MONTH_AR[result.month]}`)}
+              {th('delta', 'الفرق')}
+              <th>التقييم</th>
+              {th('curTotal', `الشحنات ${MONTH_AR[result.month]}`)}
+            </tr>
+          </thead>
+          <tbody>
+            {list.map((r) => (
+              <tr key={r.branch}>
+                <td>{r.branch}</td>
+                <td className="n">{num(r.customers)}</td>
+                <td className="n">{pct(r.baseline)}</td>
+                <td className="n"><b>{pct(r.current)}</b></td>
+                <td className="n">{pp(r.delta)}</td>
+                <td><Badge level={r.level} /></td>
+                <td className="n">{num(r.curTotal)}</td>
+              </tr>
+            ))}
+            {!list.length && <tr><td colSpan="7" className="muted center">مفيش نتائج</td></tr>}
+          </tbody>
+          {list.length > 0 && (
+            <tfoot><tr><td><b>الإجمالي</b></td><td className="n">{num(result.group.customers)}</td><td className="n">{pct(result.group.baseline)}</td><td className="n"><b>{pct(result.group.current)}</b></td><td className="n">{pp(result.group.delta)}</td><td><Badge level={result.group.level} /></td><td className="n">{num(tot.t)}</td></tr></tfoot>
+          )}
+        </table>
+      </div>
+      <p className="muted">نفس العملاء المحسوبين في المؤشرات الرئيسية، موزعين حسب الفرع اللي استلم/سلّم شحناتهم. عدد العملاء في الفرع = العملاء اللي ليهم شحنات في الفرع ده في الشهر المقاس (العميل ممكن يظهر في أكتر من فرع، فمجموع العدد قد يزيد عن الإجمالي).</p>
+    </>
+  );
+}
+
 export default function App() {
   const demo = new URLSearchParams(location.search).has('demo');
   const [data, setData] = useState(null);
@@ -188,6 +243,7 @@ export default function App() {
   const [month, setMonth] = useState('');
   const [method, setMethod] = useState('pooled');
   const [minShipments, setMin] = useState(1);
+  const [tab, setTab] = useState('main');
 
   const load = () => {
     setLoading(true); setError('');
@@ -204,6 +260,9 @@ export default function App() {
     if (data && trend.length && !trend.some((t) => t.month === month)) setMonth(trend[trend.length - 1].month);
   }, [data, trend, month]);
   const result = useMemo(() => (data && month ? evaluateMonth(data.clients, month, opts) : null), [data, month, method, minShipments]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const hasBranches = !!(data && Array.isArray(data.branches) && data.clients.some((c) => c.b));
+  const branchRows = useMemo(() => (result && !result.error && hasBranches ? evaluateBranches(data.clients, data.branches, result) : []), [data, result, hasBranches]);
 
   return (
     <div className="app">
@@ -250,46 +309,68 @@ export default function App() {
 
           {result && !result.error && (
             <>
+              <nav className="tabs" role="tablist">
+                {[['main', 'المؤشرات الرئيسية'], ['branches', 'الفروع'], ['customers', 'العملاء'], ['analysis', 'التحليل والملخص']].map(([k, label]) => (
+                  <button key={k} role="tab" aria-selected={tab === k} className={`tab ${tab === k ? 'on' : ''}`} onClick={() => setTab(k)}>{label}</button>
+                ))}
+              </nav>
+
+              {tab === 'main' && (
               <section className="kpis">
-                <Kpi title="عدد العملاء" value={num(result.group.customers)}
-                  sub={`مستبعد: ${num(result.excluded.notInAllMonths)} (مش موجودين في الـ4 شهور)${result.excluded.belowMinimum ? ` + ${num(result.excluded.belowMinimum)} (أقل من الحد الأدنى)` : ''}`} />
-                <Kpi title="متوسط التسليمات" value={pct(result.group.baseline)}
-                  sub={result.prev.map((m) => MONTH_AR[m]).join(' + ')} />
-                <Kpi title={`متوسط التسليمات ${MONTH_AR[result.month]}`} value={pct(result.group.current)}
-                  sub={`${num(result.group.curDelivered)} تسليم + ${num(result.group.curPaid)} دفع شحن من ${num(result.group.curTotal)} شحنة`} />
-                <Kpi title="الفرق" value={pp(result.group.delta)} sub="الفرق بين الشهرين بالنقاط المئوية" />
-                <div className={`kpi verdict ${result.group.level ? `lv-${result.group.level.key}` : ''}`}>
-                  <div className="kpi-title">التقييم</div>
-                  <div className="kpi-value"><Badge level={result.group.level} /></div>
-                  <div className="kpi-sub">مقبول ≥ +3 · المطلوب ≥ +5 · ممتاز ≥ +7</div>
-                </div>
-              </section>
+                  <Kpi title="عدد العملاء" value={num(result.group.customers)}
+                    sub={`مستبعد: ${num(result.excluded.notInAllMonths)} (مش موجودين في الـ4 شهور)${result.excluded.belowMinimum ? ` + ${num(result.excluded.belowMinimum)} (أقل من الحد الأدنى)` : ''}`} />
+                  <Kpi title="متوسط التسليمات" value={pct(result.group.baseline)}
+                    sub={result.prev.map((m) => MONTH_AR[m]).join(' + ')} />
+                  <Kpi title={`متوسط التسليمات ${MONTH_AR[result.month]}`} value={pct(result.group.current)}
+                    sub={`${num(result.group.curDelivered)} تسليم + ${num(result.group.curPaid)} دفع شحن من ${num(result.group.curTotal)} شحنة`} />
+                  <Kpi title="الفرق" value={pp(result.group.delta)} sub="الفرق بين الشهرين بالنقاط المئوية" />
+                  <div className={`kpi verdict ${result.group.level ? `lv-${result.group.level.key}` : ''}`}>
+                    <div className="kpi-title">التقييم</div>
+                    <div className="kpi-value"><Badge level={result.group.level} /></div>
+                    <div className="kpi-sub">مقبول ≥ +3 · المطلوب ≥ +5 · ممتاز ≥ +7</div>
+                  </div>
+                </section>
+              )}
+
+              {tab === 'branches' && (
+                <section className="card">
+                  <h2>الفروع — {MONTH_AR[result.month]}</h2>
+                  <BranchesTable rows={branchRows} result={result} hasData={hasBranches} />
+                </section>
+              )}
+
+              {tab === 'customers' && (
+              <section className="card">
+                  <h2>تفصيل العملاء — {MONTH_AR[result.month]}</h2>
+                  <CustomersTable result={result} />
+                </section>
+              )}
+
+              {tab === 'analysis' && (
+                <>
+              <section className="card">
+                    <h2>ملخص للإدارة</h2>
+                    <SummaryBox text={managementSummary(result)} />
+                  </section>
 
               <section className="card">
-                <h2>ملخص للإدارة</h2>
-                <SummaryBox text={managementSummary(result)} />
-              </section>
+                    <h2>متوسط التسليمات: الأشهر السابقة مقابل الشهر المقاس</h2>
+                    <BaselineChart result={result} />
+                    <div className="levels">
+                      {LEVELS.map((l) => <span key={l.key} className="lvl-chip"><Badge level={l} /> {num(result.levelCounts[l.key])} عميل</span>)}
+                    </div>
+                  </section>
 
               <section className="card">
-                <h2>متوسط التسليمات: الأشهر السابقة مقابل الشهر المقاس</h2>
-                <BaselineChart result={result} />
-                <div className="levels">
-                  {LEVELS.map((l) => <span key={l.key} className="lvl-chip"><Badge level={l} /> {num(result.levelCounts[l.key])} عميل</span>)}
-                </div>
-              </section>
-
-              <section className="card">
-                <h2>النتيجة شهر بشهر</h2>
-                <TrendTable rows={trend} selected={month} onSelect={setMonth} />
-              </section>
-
-              <section className="card">
-                <h2>تفصيل العملاء — {MONTH_AR[result.month]}</h2>
-                <CustomersTable result={result} />
-              </section>
+                    <h2>النتيجة شهر بشهر</h2>
+                    <TrendTable rows={trend} selected={month} onSelect={setMonth} />
+                  </section>
+                </>
+              )}
             </>
           )}
 
+          {tab === 'analysis' && (
           <details className="card">
             <summary>مراجعة تصنيف الحالات (للتأكد من أن «دفع الشحن» محسوب صح)</summary>
             <p className="muted">تُحسب «دفع شحن» فقط الحالات النهائية اللي نصها فيه: {(data.paidKeywords || []).join('، ')}. أي رفض تاني (زي رفض الدفع) لا يُحسب نجاح.</p>
@@ -308,6 +389,7 @@ export default function App() {
               </table>
             </div>
           </details>
+          )}
         </>
       )}
       <footer>المصدر: Google Sheets عبر نفس Web App الداش بورد التشغيلية — <code>action=clientMonthly</code></footer>

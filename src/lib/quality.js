@@ -121,3 +121,52 @@ export function evaluateAllMonths(clients, availableMonths, opts) {
   }
   return out;
 }
+
+/**
+ * Branch table. The set of customers is the SAME as the main KPI (present in the 3 previous months + the measured month).
+ * For every branch we then take only those customers' shipments handled by that branch:
+ *   average = pooled success rate over the 3 previous months, current = the measured month, delta in percentage points.
+ * Needs the API response with withBranches=1:  branches = [names], client.b = { branchIndex: { month: [total, delivered, paid] } }.
+ * Branch totals add up exactly to the group totals of evaluateMonth().
+ */
+export function evaluateBranches(clients, branches, evaluated) {
+  if (!evaluated || evaluated.error || !branches) return [];
+  const { prev, month, method } = evaluated;
+  const included = new Set(evaluated.rows.map((r) => r.name));
+  const acc = new Map(); // branch index -> { cells: {month:[total,ok]}, customers:Set }
+  for (const c of clients) {
+    if (!included.has(c.n) || !c.b) continue;
+    for (const [bi, months] of Object.entries(c.b)) {
+      let a = acc.get(bi);
+      if (!a) { a = { cells: {}, customers: new Set() }; acc.set(bi, a); }
+      for (const m of [...prev, month]) {
+        const cell = months[m];
+        if (!cell) continue;
+        const t = (a.cells[m] ||= [0, 0]);
+        t[0] += cell[0]; t[1] += cell[1] + cell[2];
+        if (m === month && cell[0] > 0) a.customers.add(c.n);
+      }
+    }
+  }
+  const out = [];
+  for (const [bi, a] of acc) {
+    const monthRates = prev.map((m) => (a.cells[m] ? rate(a.cells[m][1], a.cells[m][0]) : null));
+    const histTotal = prev.reduce((s, m) => s + (a.cells[m]?.[0] || 0), 0);
+    const histOk = prev.reduce((s, m) => s + (a.cells[m]?.[1] || 0), 0);
+    const cur = a.cells[month];
+    if (!histTotal || !cur || !cur[0]) continue; // a branch needs shipments in the baseline and in the measured month
+    let baseline;
+    if (method === 'mean') {
+      const valid = monthRates.filter((x) => x !== null);
+      baseline = valid.reduce((s, x) => s + x, 0) / valid.length;
+    } else baseline = rate(histOk, histTotal);
+    const current = rate(cur[1], cur[0]);
+    const delta = current - baseline;
+    out.push({
+      branch: branches[Number(bi)], customers: a.customers.size,
+      histTotal, curTotal: cur[0], curSuccess: cur[1],
+      baseline, current, delta, level: levelFor(delta),
+    });
+  }
+  return out;
+}

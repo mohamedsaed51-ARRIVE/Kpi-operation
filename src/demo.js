@@ -1,6 +1,7 @@
 // Deterministic SAMPLE data — only used with ?demo=1 to preview the layout. NOT real ARRIVE data.
 const MONTHS = ['July', 'August', 'September', 'October'];
 function rng(seed) { let s = seed; return () => (s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296; }
+const BRANCHES = ['القاهرة', 'الجيزة', 'الإسكندرية', 'المنصورة', 'طنطا', 'أسيوط'];
 export function demoData() {
   const r = rng(7);
   const clients = [];
@@ -14,10 +15,20 @@ export function demoData() {
       const ok = Math.round(t * p), paid = Math.round(ok * 0.05);
       v[m] = [t, ok - paid, paid];
     });
-    clients.push({ n: `عميل تجريبي ${i}`, v });
+    // split every month's counts across 1-3 branches (the parts add up exactly to the customer's totals)
+    const b = {}; const myBranches = [Math.floor(r() * 6), Math.floor(r() * 6), Math.floor(r() * 6)].filter((x, k, a) => a.indexOf(x) === k);
+    Object.entries(v).forEach(([m, c]) => {
+      let left = [...c];
+      myBranches.forEach((bi, k) => {
+        const last = k === myBranches.length - 1;
+        const part = last ? left : left.map((x) => Math.round(x * (0.3 + r() * 0.3)));
+        (b[bi] ||= {})[m] = part; left = left.map((x, j) => x - part[j]);
+      });
+    });
+    clients.push({ n: `عميل تجريبي ${i}`, v, b });
   }
   return {
-    success: true, months: MONTHS, missingMonths: [], skippedMonths: [], clients,
+    success: true, branches: BRANCHES, months: MONTHS, missingMonths: [], skippedMonths: [], clients,
     statusClassification: [
       { status: 'تسليم ناجح', cls: 'delivered', count: 0 },
       { status: 'رفض (الحالة النهائية): رفض الاستلام و تم دفع الشحن', cls: 'paid', count: 0 },
