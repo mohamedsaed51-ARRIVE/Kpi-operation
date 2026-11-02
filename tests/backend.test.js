@@ -41,7 +41,36 @@ test('reproduces exactly what the operations dashboard code computed from the sa
   const { sb } = load();
   const got = JSON.parse(JSON.stringify(sb.getClientMonthlyPayload({})));
   delete got.durationMs;
-  assert.deepEqual(got, fixture.expected);
+  // the first four values of every cell are what the operations dashboard's code produced; the SLA values are checked below
+  const first4 = (cells) => Object.fromEntries(Object.entries(cells).map(([m, c]) => [m, c.slice(0, 4)]));
+  const strip = (p) => ({ ...p, clients: p.clients.map((c) => ({ n: c.n, v: first4(c.v), b: Object.fromEntries(Object.entries(c.b).map(([bi, ms]) => [bi, first4(ms)])) })) });
+  assert.deepEqual(strip(got), strip(fixture.expected));
+});
+
+test('SLA values reproduce the operations dashboard\'s own «متوسط مدة التسليم» (customers and branches)', () => {
+  const { sb } = load();
+  const got = JSON.parse(JSON.stringify(sb.getClientMonthlyPayload({})));
+  let checked = 0;
+  for (const month of got.months) {
+    const snap = JSON.parse(fixture.rows[month].map((r) => r[7]).join(''));
+    // per branch: sum of days / delivered-with-date across all customers must equal the dashboard's branch avgDays
+    got.branches.forEach((bn, bi) => {
+      let days = 0, n = 0;
+      got.clients.forEach((c) => { const cell = c.b[bi] && c.b[bi][month]; if (cell) { days += cell[4]; n += cell[5]; } });
+      const ref = snap.branchSummary.find((b) => b.name === bn);
+      assert.ok(ref, bn);
+      assert.ok(ref.avgDays === null ? n === 0 : Math.abs(days / n - ref.avgDays) < 0.005, `${month} ${bn}: ${days / n} vs ${ref.avgDays}`);
+      checked++;
+    });
+    // per customer likewise
+    got.clients.forEach((c) => {
+      const cell = c.v[month]; if (!cell) return;
+      const ref = snap.customerSummary.find((x) => x.name === c.n);
+      assert.ok(ref.avgDays === null ? cell[5] === 0 : Math.abs(cell[4] / cell[5] - ref.avgDays) < 0.005, `${month} ${c.n}`);
+      checked++;
+    });
+  }
+  assert.ok(checked > 20);
 });
 
 test('never writes to or creates anything in the spreadsheets', () => {

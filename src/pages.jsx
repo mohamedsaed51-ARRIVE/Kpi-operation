@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { MONTH_AR, METRICS } from './lib/quality.js';
 import { cleanTargets, invalidCells, normBranch } from './lib/targets.js';
 import { apiChecks, monthCoverage, namesWithEntities, similarNames } from './lib/dataQuality.js';
-import { Badge, CustomersTable, KpiCards, num } from './components.jsx';
+import { SLA, evaluateSlaBranches, thresholdsTextSla } from './lib/sla.js';
+import { Badge, CustomersTable, Kpi, KpiCards, num } from './components.jsx';
 
 /* ------------------------------------------------------------------ العملاء */
 export function CustomersPage({ results }) {
@@ -179,5 +180,97 @@ export function SettingsPage({ branches, targets, onSave, unavailableReason }) {
         {dirty && <span className="muted" style={{ marginInlineStart: 12 }}>فيه تغييرات لم تُحفظ</span>}
       </div>
     </section>
+  );
+}
+
+/* ------------------------------------------------------------------ الفروع (SLA التسليم) */
+const d2 = (v) => (v === null || v === undefined ? '—' : v.toFixed(2));
+const imp = (v) => (v === null || v === undefined ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(2)}`);
+
+export function BranchesPage({ data, delivery }) {
+  const available = SLA.available(data.clients) && Array.isArray(data.branches);
+  const ev = delivery?.result;
+  const { rows, group } = useMemo(
+    () => (available && ev ? evaluateSlaBranches(data.clients, data.branches, ev) : { rows: [], group: null }),
+    [data, available, ev],
+  );
+  const [sort, setSort] = useState({ key: 'improvement', dir: 'desc' });
+  const [q, setQ] = useState('');
+  const list = useMemo(() => rows.filter((r) => !q || r.branch.includes(q.trim())).sort((a, b) => {
+    const A = a[sort.key], B = b[sort.key];
+    const c = typeof A === 'string' ? A.localeCompare(B, 'ar') : A - B;
+    return sort.dir === 'asc' ? c : -c;
+  }), [rows, q, sort]);
+  if (!available) return <div className="alert warn">بيانات SLA التسليم مش موجودة في رد السيرفر. اتأكد إن الباك إند المنشور هو آخر نسخة من <code>backend/Code.gs</code>.</div>;
+  if (!ev || !group) return <div className="alert warn">مفيش بيانات كفاية لحساب SLA الفروع في الشهر المختار.</div>;
+  const counts = Object.fromEntries(SLA.levels.map((l) => [l.key, rows.filter((r) => r.level.key === l.key).length]));
+  const th = (key, label) => (
+    <th className="sortable" onClick={() => setSort((x) => ({ key, dir: x.key === key && x.dir === 'desc' ? 'asc' : 'desc' }))}>
+      {label}{sort.key === key ? (sort.dir === 'desc' ? ' ▼' : ' ▲') : ''}
+    </th>
+  );
+  return (
+    <>
+      <section className="kpis">
+        <Kpi title="عدد الفروع" value={num(rows.length)} sub={`${num(group.customers)} عميل محسوب (نفس عملاء باقي المؤشرات)`} />
+        <Kpi title={SLA.avgLabel} value={`${d2(group.baseline)} يوم`} sub={ev.prev.map((m) => MONTH_AR[m]).join(' + ')} />
+        <Kpi title={`${SLA.avgLabel} ${MONTH_AR[ev.month]}`} value={`${d2(group.current)} يوم`} tone="brand" sub={`${num(group.delivered)} شحنة مسلّمة`} />
+        <Kpi title="التحسن" value={`${imp(group.improvement)} يوم`} tone={group.improvement >= 0 ? 'good' : 'bad'} sub="الموجب = أسرع من متوسط الأشهر السابقة" />
+        <div className={`kpi verdict ${group.level ? `lv-${group.level.key}` : ''}`}>
+          <div className="kpi-title">التقييم</div>
+          <div className="kpi-value"><Badge level={group.level} /></div>
+          <div className="kpi-sub">{thresholdsTextSla()}</div>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>الفروع — SLA التسليم ({MONTH_AR[ev.month]})</h2>
+        <div className="levels" style={{ marginBottom: 10 }}>
+          {SLA.levels.map((l) => <span key={l.key} className="lvl-chip"><Badge level={l} /> {num(counts[l.key])} فرع</span>)}
+        </div>
+        <div className="toolbar"><input placeholder="ابحث باسم الفرع…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                {th('branch', 'الفرع')}
+                {th('customers', 'عدد العملاء')}
+                {th('baseline', `${SLA.avgLabel} (${ev.prev.map((m) => MONTH_AR[m]).join(' + ')})`)}
+                {th('current', `${SLA.avgLabel} ${MONTH_AR[ev.month]}`)}
+                {th('improvement', 'التحسن (يوم)')}
+                <th>التقييم</th>
+                {th('delivered', `الشحنات المسلّمة ${MONTH_AR[ev.month]}`)}
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((r) => (
+                <tr key={r.branch}>
+                  <td>{r.branch}</td>
+                  <td className="n">{num(r.customers)}</td>
+                  <td className="n">{d2(r.baseline)}</td>
+                  <td className="n"><b>{d2(r.current)}</b></td>
+                  <td className="n">{imp(r.improvement)}</td>
+                  <td><Badge level={r.level} /></td>
+                  <td className="n">{num(r.delivered)}</td>
+                </tr>
+              ))}
+              {!list.length && <tr><td colSpan="7" className="muted center">مفيش نتائج</td></tr>}
+            </tbody>
+            {list.length > 0 && (
+              <tfoot>
+                <tr>
+                  <td><b>الإجمالي</b></td><td className="n">{num(group.customers)}</td><td className="n">{d2(group.baseline)}</td>
+                  <td className="n"><b>{d2(group.current)}</b></td><td className="n">{imp(group.improvement)}</td><td><Badge level={group.level} /></td><td className="n">{num(group.delivered)}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+        <p className="muted">
+          SLA التسليم = متوسط مدة التسليم بالأيام (من الاستلام لآخر حالة) للشحنات المسلّمة، لنفس العملاء المحسوبين في باقي المؤشرات (الموجودين في الـ3 شهور السابقة والشهر المقاس)،
+          مقارنة بمتوسط آخر 3 شهور. التحسن = المتوسط السابق − متوسط الشهر المقاس؛ النقص تحسّن.
+        </p>
+      </section>
+    </>
   );
 }

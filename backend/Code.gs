@@ -103,7 +103,8 @@ function readSavedMonth_(month) {
 }
 
 // ---------- clientMonthly ----------
-// Customer cell = [total, delivered, rejected-with-shipping-paid, delivered-on-first-attempt].
+// Cell = [total, delivered, rejected-with-shipping-paid, delivered-on-first-attempt, sum of delivery days, delivered shipments with a valid date].
+// Average delivery days (SLA) = cell[4] / cell[5] — same numbers the operations dashboard shows as «متوسط مدة التسليم».
 // Branch detail: client.b = { branchIndex: { month: cell } } with the names in `branches`.
 function getClientMonthlyPayload(params) {
   var t0 = new Date().getTime();
@@ -127,19 +128,21 @@ function getClientMonthlyPayload(params) {
     for (var ri = 0; ri < records.length; ri++) {
       var rec = records[ri], n = rec[7], cls = classes[rec[4]];
       var name = dict.client[rec[3]];
-      var v = perClient[name] || (perClient[name] = [0, 0, 0, 0]);
+      var v = perClient[name] || (perClient[name] = [0, 0, 0, 0, 0, 0]);
       v[0] += n;
       if (cls === "delivered") v[1] += n; else if (cls === "paid") v[2] += n;
       var isFirst = (cls === "delivered" && rec[5] === 0); // rec[5]: attempt category (0 = first attempt)
       if (isFirst) v[3] += n;
+      if (cls === "delivered") { v[4] += (rec[10] || 0); v[5] += (rec[11] || 0); } // rec[10]: sum of delivery days, rec[11]: delivered shipments with a date
 
       var bn = dict.branch[rec[2]];
       var bi = branchIdx.hasOwnProperty(bn) ? branchIdx[bn] : (branchIdx[bn] = branchList.push(bn) - 1);
       var pb = perClientBranch[name] || (perClientBranch[name] = {});
-      var pbv = pb[bi] || (pb[bi] = [0, 0, 0, 0]);
+      var pbv = pb[bi] || (pb[bi] = [0, 0, 0, 0, 0, 0]);
       pbv[0] += n;
       if (cls === "delivered") pbv[1] += n; else if (cls === "paid") pbv[2] += n;
       if (isFirst) pbv[3] += n;
+      if (cls === "delivered") { pbv[4] += (rec[10] || 0); pbv[5] += (rec[11] || 0); }
 
       if (cls !== "other") {
         var label = dict.status[rec[4]];
@@ -147,6 +150,9 @@ function getClientMonthlyPayload(params) {
         statusRows[label].count += n;
       }
     }
+    var r3 = function (x) { return Math.round(x * 1000) / 1000; };
+    Object.keys(perClient).forEach(function (nm) { perClient[nm][4] = r3(perClient[nm][4]); });
+    Object.keys(perClientBranch).forEach(function (nm) { Object.keys(perClientBranch[nm]).forEach(function (b) { perClientBranch[nm][b][4] = r3(perClientBranch[nm][b][4]); }); });
     months.push(month);
     Object.keys(perClient).forEach(function (nm) {
       if (!clients[nm]) { clients[nm] = {}; clientOrder.push(nm); }
