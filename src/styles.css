@@ -118,3 +118,15 @@ code { background: #EEF2F7; padding: 1px 5px; border-radius: 4px; font-size: 12p
   .shell { display: block; } .main { padding: 0; max-width: none; }
   body { background: #fff; } .card, .kpi { break-inside: avoid; box-shadow: none; }
 }
+
+/* ---------- extra pages ---------- */
+.seg { display: inline-flex; background: #E2E8F0; border-radius: 12px; padding: 4px; gap: 4px; margin-bottom: 14px; }
+.seg-btn { background: none; border: 0; font: inherit; font-weight: 700; color: var(--gray); padding: 8px 18px; border-radius: 9px; cursor: pointer; }
+.seg-btn.on { background: #fff; color: var(--blue); box-shadow: var(--shadow); }
+.nav-title { font-size: 11px; letter-spacing: .06em; color: #64748B; padding: 14px 12px 4px; }
+.bulk { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 14px; }
+.bulk-item { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--gray); font-weight: 600; }
+.bulk-item input { min-width: 90px; width: 110px; }
+td input[type=number] { width: 130px; min-width: 0; }
+input.invalid { border-color: #EF4444; background: #FFF5F5; }
+ul.plain { margin: 6px 0 0; padding-inline-start: 20px; line-height: 1.9; }

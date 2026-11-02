@@ -38,3 +38,7 @@ export function demoData() {
     paidKeywords: ['تم دفع الشحن'], demo: true,
   };
 }
+
+export function demoTargets() {
+  return { delivery: { 'القاهرة': 85, 'الجيزة': 82 }, firstAttempt: { 'القاهرة': 40 } };
+}

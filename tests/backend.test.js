@@ -1,0 +1,93 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+
+const fixture = JSON.parse(fs.readFileSync(new URL('./fixtures/saved-summaries.json', import.meta.url), 'utf8'));
+const code = fs.readFileSync(new URL('../backend/Code.gs', import.meta.url), 'utf8');
+
+function load({ rows = fixture.rows, props = {} } = {}) {
+  const writes = []; // anything that would modify a spreadsheet ends up here — must stay empty
+  const store = { ...props };
+  const sheetFor = (month) => ({
+    getLastRow: () => (rows[month] ? rows[month].length + 1 : 1),
+    getRange: () => ({ getValues: () => rows[month] || [], setValues: (v) => writes.push(['setValues', v]) }),
+    insertSheet: () => writes.push(['insertSheet']),
+  });
+  // each quarter file holds its months' rows in one DASHBOARD_SUMMARY tab
+  const quarterRows = (qMonths) => qMonths.flatMap((m) => rows[m] || []);
+  const Q = { 'Q1': [], 'Q2': [], 'Q3': ['July', 'August', 'September'], 'Q4': ['October'] };
+  const sb = {
+    console, Date, Math, JSON, Object, Number, String, isFinite, Array,
+    SpreadsheetApp: {
+      openById: (id) => {
+        const key = { '1_JaWfM199wOhRw2-7znStlvw9R2hENWg8s-6Dc_zYWU': 'Q1', '1auCRCzBQcO-ej4JeoEyYzhfBiGtlBb9WdM4iCbNNxkA': 'Q2', '1FUCWpI3DvJ6FRiEJ7eR6wNIn6iLIcJ_PSBBgxT74jJo': 'Q3', '1EosPPKKZ549a6cEGcF_7sCuG9W_ZQmbi6s0MQgehdTs': 'Q4' }[id];
+        if (!key) throw new Error('unknown spreadsheet');
+        const all = quarterRows(Q[key]);
+        return {
+          getSheetByName: (n) => (n === 'DASHBOARD_SUMMARY' && all.length ? { getLastRow: () => all.length + 1, getRange: () => ({ getValues: () => all, setValues: (v) => writes.push(['setValues', v]) }) } : null),
+          insertSheet: () => writes.push(['insertSheet']),
+        };
+      },
+    },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => store[k] ?? null, setProperty: (k, v) => { store[k] = v; } }) },
+    ContentService: { createTextOutput: (t) => ({ setMimeType: () => ({ text: t }) }), MimeType: { TEXT: 'TEXT' } },
+  };
+  vm.createContext(sb); vm.runInContext(code, sb);
+  return { sb, writes, store };
+}
+
+test('reproduces exactly what the operations dashboard code computed from the same saved summaries', () => {
+  const { sb } = load();
+  const got = JSON.parse(JSON.stringify(sb.getClientMonthlyPayload({})));
+  delete got.durationMs;
+  assert.deepEqual(got, fixture.expected);
+});
+
+test('never writes to or creates anything in the spreadsheets', () => {
+  const { sb, writes } = load();
+  sb.getClientMonthlyPayload({});
+  sb.doGet({ parameter: { action: 'clientMonthly' } });
+  assert.deepEqual(writes, []);
+});
+
+test('months without a saved summary are reported, not guessed', () => {
+  const { sb } = load();
+  const r = JSON.parse(JSON.stringify(sb.getClientMonthlyPayload({})));
+  assert.deepEqual(r.months, ['July', 'August', 'September', 'October']);
+  assert.equal(r.missingMonths.length, 8);
+  const one = JSON.parse(JSON.stringify(sb.getClientMonthlyPayload({ months: 'October' })));
+  assert.deepEqual(one.months, ['October']);
+});
+
+test('a corrupted / incomplete summary is treated as missing', () => {
+  const broken = { ...fixture.rows, October: fixture.rows.October.map((r) => [...r.slice(0, 6), 5, ...r.slice(7)]) }; // chunk count says 5 but only 1 row
+  const { sb } = load({ rows: broken });
+  const r = sb.getClientMonthlyPayload({});
+  assert.ok(r.missingMonths.includes('October'));
+});
+
+test('classification: paid-shipping rejection is a success, refused-and-not-paid is not', () => {
+  const { sb } = load();
+  const cls = Object.fromEntries(JSON.parse(JSON.stringify(sb.getClientMonthlyPayload({}))).statusClassification.map((s) => [s.status.replace('رفض (الحالة النهائية): ', ''), s.cls]));
+  assert.equal(cls['رفض الاستلام و تم دفع الشحن'], 'paid');
+  assert.equal(cls['رفض الاستلام و رفض والدفع'], 'rejectedOther');
+  assert.equal(cls['تسليم ناجح'], 'delivered');
+});
+
+test('targets: validated, stored in this project, and read back', () => {
+  const { sb, store } = load();
+  assert.deepEqual(JSON.parse(JSON.stringify(sb.getKpiTargetsPayload().targets)), { delivery: {}, firstAttempt: {} });
+  const s = sb.saveKpiTargetsPayload({ targets: JSON.stringify({ delivery: { 'فرع طنطا': 92, a: 150, b: -1, c: '', d: 'x' }, firstAttempt: { 'فرع طنطا': '45.5' }, other: { z: 1 } }) });
+  assert.equal(s.success, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(s.targets)), { delivery: { 'فرع طنطا': 92 }, firstAttempt: { 'فرع طنطا': 45.5 } });
+  assert.ok(store.KPI_TARGETS_JSON);
+  assert.equal(sb.saveKpiTargetsPayload({ targets: '{bad' }).success, false);
+  assert.equal(JSON.parse(JSON.stringify(sb.getKpiTargetsPayload().targets)).delivery['فرع طنطا'], 92); // unchanged after a failed save
+});
+
+test('doGet routes actions and answers ping', () => {
+  const { sb } = load();
+  assert.equal(JSON.parse(sb.doGet({ parameter: { action: 'ping' } }).text).success, true);
+  assert.equal(JSON.parse(sb.doGet({ parameter: { action: 'nope' } }).text).success, false);
+});
