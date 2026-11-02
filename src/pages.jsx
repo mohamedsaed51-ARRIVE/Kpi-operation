@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { MONTH_AR, METRICS } from './lib/quality.js';
-import { cleanTargets, invalidCells, normBranch } from './lib/targets.js';
+import { cleanTargets, invalidCells, meetsMaxTarget, normBranch, targetFor } from './lib/targets.js';
 import { apiChecks, monthCoverage, namesWithEntities, similarNames } from './lib/dataQuality.js';
 import { SLA, evaluateSlaBranches, thresholdsTextSla } from './lib/sla.js';
 import { Badge, CustomersTable, Kpi, KpiCards, num } from './components.jsx';
@@ -109,12 +109,17 @@ export function DataQualityPage({ data }) {
 }
 
 /* ------------------------------------------------------------------ الإعدادات */
-const SETTINGS_METRICS = [METRICS.delivery, METRICS.firstAttempt];
+// One column per KPI: percentage targets (higher is better) and the SLA target in days (lower is better).
+const SETTINGS_METRICS = [
+  { id: 'delivery', label: METRICS.delivery.label, unit: '٪', max: 100, step: 0.1, example: 'مثلاً 90' },
+  { id: 'firstAttempt', label: METRICS.firstAttempt.label, unit: '٪', max: 100, step: 0.1, example: 'مثلاً 45' },
+  { id: 'sla', label: SLA.label, unit: 'يوم', max: 60, step: 0.01, example: 'مثلاً 2' },
+];
 
 export function SettingsPage({ branches, targets, onSave, unavailableReason }) {
   const toDraft = (t) => Object.fromEntries(SETTINGS_METRICS.map((m) => [m.id, Object.fromEntries(Object.entries(t?.[m.id] || {}).map(([b, v]) => [b, String(v)]))]));
   const [draft, setDraft] = useState(() => toDraft(targets));
-  const [bulk, setBulk] = useState({ delivery: '', firstAttempt: '' });
+  const [bulk, setBulk] = useState({ delivery: '', firstAttempt: '', sla: '' });
   const [state, setState] = useState({ saving: false, message: '', error: '' });
   useEffect(() => { setDraft(toDraft(targets)); }, [targets]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -142,28 +147,29 @@ export function SettingsPage({ branches, targets, onSave, unavailableReason }) {
     <section className="card">
       <h2>تارجت الفروع</h2>
       <p className="muted">
-        التارجت = النسبة المطلوب أن يحققها الفرع (٪) في الشهر المقاس. يظهر في جدول الفروع داخل صفحة كل مؤشر مع «محقق / لم يتحقق».
-        اترك الخانة فاضية لو مفيش تارجت لهذا الفرع. القيمة بين 0 و100.
+        نسبة التسليم وFirst Attempt: التارجت = النسبة المطلوب أن يحققها الفرع (٪) في الشهر المقاس، ويظهر في جدول الفروع داخل صفحة المؤشر.
+        SLA التسليم: التارجت = أقصى متوسط مدة تسليم بالأيام (الأقل أحسن)، ويظهر في صفحة «الفروع». «محقق / لم يتحقق» بيتحسب تلقائيًا.
+        اترك الخانة فاضية لو مفيش تارجت. النسب بين 0 و100، والأيام بين 0 و60.
       </p>
       <div className="bulk">
         {SETTINGS_METRICS.map((m) => (
           <div key={m.id} className="bulk-item">
-            <span>{m.label}: نفس القيمة لكل الفروع</span>
-            <input type="number" min="0" max="100" step="0.1" value={bulk[m.id]} onChange={(e) => setBulk((b) => ({ ...b, [m.id]: e.target.value }))} placeholder="مثلاً 90" />
+            <span>{m.label} ({m.unit}): نفس القيمة لكل الفروع</span>
+            <input type="number" min="0" max={m.max} step={m.step} value={bulk[m.id]} onChange={(e) => setBulk((b) => ({ ...b, [m.id]: e.target.value }))} placeholder={m.example} />
             <button className="btn ghost" style={{ marginTop: 0 }} onClick={() => applyAll(m.id)} disabled={bulk[m.id] === ''}>تطبيق</button>
           </div>
         ))}
       </div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>الفرع</th>{SETTINGS_METRICS.map((m) => <th key={m.id}>تارجت {m.label} (٪)</th>)}</tr></thead>
+          <thead><tr><th>الفرع</th>{SETTINGS_METRICS.map((m) => <th key={m.id}>تارجت {m.label} ({m.unit})</th>)}</tr></thead>
           <tbody>
             {all.map((b) => (
               <tr key={b}>
                 <td>{b}</td>
                 {SETTINGS_METRICS.map((m) => (
                   <td key={m.id}>
-                    <input type="number" min="0" max="100" step="0.1" className={badKey.has(`${m.id}|${b}`) ? 'invalid' : ''}
+                    <input type="number" min="0" max={m.max} step={m.step} className={badKey.has(`${m.id}|${b}`) ? 'invalid' : ''}
                       value={draft[m.id]?.[b] ?? ''} onChange={(e) => setCell(m.id, b, e.target.value)} />
                   </td>
                 ))}
@@ -172,7 +178,7 @@ export function SettingsPage({ branches, targets, onSave, unavailableReason }) {
           </tbody>
         </table>
       </div>
-      {bad.length > 0 && <div className="alert err" style={{ marginTop: 12 }}>{bad.length} خانة قيمتها غير صالحة (لازم رقم بين 0 و100) ولن تُحفظ.</div>}
+      {bad.length > 0 && <div className="alert err" style={{ marginTop: 12 }}>{bad.length} خانة قيمتها غير صالحة (النسب بين 0 و100، والأيام بين 0 و60) ولن تُحفظ.</div>}
       {state.error && <div className="alert err" style={{ marginTop: 12 }}><b>تعذر الحفظ.</b> {state.error}</div>}
       {state.message && <div className="alert" style={{ marginTop: 12 }}>{state.message}</div>}
       <div style={{ marginTop: 14 }}>
@@ -185,9 +191,23 @@ export function SettingsPage({ branches, targets, onSave, unavailableReason }) {
 
 /* ------------------------------------------------------------------ الفروع (SLA التسليم) */
 const d2 = (v) => (v === null || v === undefined ? '—' : v.toFixed(2));
-const imp = (v) => (v === null || v === undefined ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(2)}`);
+const imp = (v) => (v === null || v === undefined ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(3)}`); // 3 decimals so a 0.1996 improvement is not shown as 0.20 next to a lower level
 
-export function BranchesPage({ data, delivery }) {
+function SlaTargetCells({ current, target }) {
+  const met = meetsMaxTarget(current, target);
+  return (
+    <>
+      <td className="n">{target === null ? <span className="muted">—</span> : d2(target)}</td>
+      <td>
+        {met === null ? <span className="muted">لم يُحدد تارجت</span>
+          : met ? <span className="badge lv-excellent">✔ محقق</span>
+            : <span className="badge lv-below">✖ لم يتحقق (أبطأ بـ {d2(current - target)} يوم)</span>}
+      </td>
+    </>
+  );
+}
+
+export function BranchesPage({ data, delivery, targets }) {
   const available = SLA.available(data.clients) && Array.isArray(data.branches);
   const ev = delivery?.result;
   const { rows, group } = useMemo(
@@ -239,6 +259,8 @@ export function BranchesPage({ data, delivery }) {
                 {th('current', `${SLA.avgLabel} ${MONTH_AR[ev.month]}`)}
                 {th('improvement', 'التحسن (يوم)')}
                 <th>التقييم</th>
+                <th>التارجت (يوم)</th>
+                <th>تحقيق التارجت</th>
                 {th('delivered', `الشحنات المسلّمة ${MONTH_AR[ev.month]}`)}
               </tr>
             </thead>
@@ -251,16 +273,17 @@ export function BranchesPage({ data, delivery }) {
                   <td className="n"><b>{d2(r.current)}</b></td>
                   <td className="n">{imp(r.improvement)}</td>
                   <td><Badge level={r.level} /></td>
+                  <SlaTargetCells current={r.current} target={targetFor(targets, 'sla', r.branch)} />
                   <td className="n">{num(r.delivered)}</td>
                 </tr>
               ))}
-              {!list.length && <tr><td colSpan="7" className="muted center">مفيش نتائج</td></tr>}
+              {!list.length && <tr><td colSpan="9" className="muted center">مفيش نتائج</td></tr>}
             </tbody>
             {list.length > 0 && (
               <tfoot>
                 <tr>
                   <td><b>الإجمالي</b></td><td className="n">{num(group.customers)}</td><td className="n">{d2(group.baseline)}</td>
-                  <td className="n"><b>{d2(group.current)}</b></td><td className="n">{imp(group.improvement)}</td><td><Badge level={group.level} /></td><td className="n">{num(group.delivered)}</td>
+                  <td className="n"><b>{d2(group.current)}</b></td><td className="n">{imp(group.improvement)}</td><td><Badge level={group.level} /></td><td>—</td><td>—</td><td className="n">{num(group.delivered)}</td>
                 </tr>
               </tfoot>
             )}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { targetFor, meetsTarget, cleanTargets, invalidCells, normBranch } from '../src/lib/targets.js';
+import { targetFor, meetsTarget, meetsMaxTarget, cleanTargets, invalidCells, normBranch } from '../src/lib/targets.js';
 import { monthCoverage, namesWithEntities, similarNames, apiChecks } from '../src/lib/dataQuality.js';
 import { METRICS } from '../src/lib/quality.js';
 
@@ -49,4 +49,15 @@ test('names with HTML entities and near-duplicate names are found', () => {
 test('API checks report what the server version lacks', () => {
   const c = apiChecks({ branches: undefined, clients: [{ n: 'a', v: { July: [1, 1, 0] } }] }, [METRICS.firstAttempt]);
   assert.deepEqual(c.map((x) => x.ok), [false, false]);
+});
+
+test('SLA target is in days (max 60) and lower is better', () => {
+  assert.equal(meetsMaxTarget(2.0, 2.0), true);
+  assert.equal(meetsMaxTarget(1.5, 2.0), true);
+  assert.equal(meetsMaxTarget(2.01, 2.0), false);
+  assert.equal(meetsMaxTarget(2.0 + 1e-12, 2.0), true);
+  assert.equal(meetsMaxTarget(2.0, null), null);
+  const draft = { sla: { a: '2.25', b: '61', c: '-1' }, delivery: { a: '99' } };
+  assert.deepEqual(cleanTargets(draft), { sla: { a: 2.25 }, delivery: { a: 99 } });
+  assert.deepEqual(invalidCells(draft).map((x) => `${x.metricId}:${x.branch}`), ['sla:b', 'sla:c']);
 });

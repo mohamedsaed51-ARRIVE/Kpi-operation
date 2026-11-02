@@ -39,7 +39,9 @@ var PAID_KEYWORDS = ["تم دفع الشحن"];                // a rejection co
 var TIME_BUDGET_MS = 240000;
 
 var KPI_TARGETS_PROPERTY_KEY = "KPI_TARGETS_JSON";
-var KPI_TARGET_METRICS = ["delivery", "firstAttempt"];
+var KPI_TARGET_METRICS = ["delivery", "firstAttempt", "sla"];
+// Largest accepted value per KPI: percentages go up to 100, the SLA target is a number of days.
+var KPI_TARGET_MAX = { delivery: 100, firstAttempt: 100, sla: 60 };
 
 function doGet(e) {
   var params = (e && e.parameter) ? e.parameter : {};
@@ -175,7 +177,8 @@ function getClientMonthlyPayload(params) {
 }
 
 // ---------- branch targets ----------
-// { delivery: { "<branch>": <percent> }, firstAttempt: { "<branch>": <percent> } } — a percentage between 0 and 100.
+// { delivery: { "<branch>": <percent> }, firstAttempt: { "<branch>": <percent> }, sla: { "<branch>": <days> } }
+// delivery / firstAttempt: a percentage between 0 and 100 (higher is better). sla: maximum average delivery days (lower is better).
 function readTargets_() {
   try {
     var raw = PropertiesService.getScriptProperties().getProperty(KPI_TARGETS_PROPERTY_KEY);
@@ -184,7 +187,7 @@ function readTargets_() {
     KPI_TARGET_METRICS.forEach(function (m) { out[m] = (parsed && parsed[m] && typeof parsed[m] === "object") ? parsed[m] : {}; });
     return out;
   } catch (e) {
-    return { delivery: {}, firstAttempt: {} };
+    return { delivery: {}, firstAttempt: {}, sla: {} };
   }
 }
 function getKpiTargetsPayload() { return { success: true, targets: readTargets_() }; }
@@ -200,7 +203,7 @@ function saveKpiTargetsPayload(params) {
         var name = normText_(b), val = src[b];
         if (!name || val === null || val === undefined || val === "") continue;
         var n = Number(val);
-        if (!isFinite(n) || n < 0 || n > 100) continue;
+        if (!isFinite(n) || n < 0 || n > KPI_TARGET_MAX[m]) continue;
         clean[m][name] = n;
       }
     });

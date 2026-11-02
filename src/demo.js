@@ -41,5 +41,5 @@ export function demoData() {
 }
 
 export function demoTargets() {
-  return { delivery: { 'القاهرة': 85, 'الجيزة': 82 }, firstAttempt: { 'القاهرة': 40 } };
+  return { delivery: { 'القاهرة': 85, 'الجيزة': 82 }, firstAttempt: { 'القاهرة': 40 }, sla: { 'القاهرة': 2.0, 'الجيزة': 2.0 } };
 }

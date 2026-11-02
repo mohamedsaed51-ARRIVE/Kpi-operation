@@ -106,10 +106,10 @@ test('classification: paid-shipping rejection is a success, refused-and-not-paid
 
 test('targets: validated, stored in this project, and read back', () => {
   const { sb, store } = load();
-  assert.deepEqual(JSON.parse(JSON.stringify(sb.getKpiTargetsPayload().targets)), { delivery: {}, firstAttempt: {} });
-  const s = sb.saveKpiTargetsPayload({ targets: JSON.stringify({ delivery: { 'فرع طنطا': 92, a: 150, b: -1, c: '', d: 'x' }, firstAttempt: { 'فرع طنطا': '45.5' }, other: { z: 1 } }) });
+  assert.deepEqual(JSON.parse(JSON.stringify(sb.getKpiTargetsPayload().targets)), { delivery: {}, firstAttempt: {}, sla: {} });
+  const s = sb.saveKpiTargetsPayload({ targets: JSON.stringify({ delivery: { 'فرع طنطا': 92, a: 150, b: -1, c: '', d: 'x' }, firstAttempt: { 'فرع طنطا': '45.5' }, sla: { 'فرع طنطا': '2.25', big: 61, neg: -1 }, other: { z: 1 } }) });
   assert.equal(s.success, true);
-  assert.deepEqual(JSON.parse(JSON.stringify(s.targets)), { delivery: { 'فرع طنطا': 92 }, firstAttempt: { 'فرع طنطا': 45.5 } });
+  assert.deepEqual(JSON.parse(JSON.stringify(s.targets)), { delivery: { 'فرع طنطا': 92 }, firstAttempt: { 'فرع طنطا': 45.5 }, sla: { 'فرع طنطا': 2.25 } }); // sla is in days (max 60), the others are percentages (max 100)
   assert.ok(store.KPI_TARGETS_JSON);
   assert.equal(sb.saveKpiTargetsPayload({ targets: '{bad' }).success, false);
   assert.equal(JSON.parse(JSON.stringify(sb.getKpiTargetsPayload().targets)).delivery['فرع طنطا'], 92); // unchanged after a failed save

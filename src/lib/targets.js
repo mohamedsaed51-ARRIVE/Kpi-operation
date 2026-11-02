@@ -9,6 +9,16 @@ export function targetFor(targets, metricId, branch) {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
+// Largest value accepted per KPI: percentages up to 100; the SLA target is a number of days (lower is better).
+export const TARGET_LIMITS = { delivery: 100, firstAttempt: 100, sla: 60 };
+const limitOf = (metricId) => TARGET_LIMITS[metricId] ?? 100;
+
+/** SLA only: met when the average delivery days is at most the target. */
+export function meetsMaxTarget(current, target) {
+  if (target === null || target === undefined || current === null || current === undefined) return null;
+  return current <= target + 1e-9;
+}
+
 /** true / false, or null when there is no target (or no value) to compare. Tolerates floating-point noise. */
 export function meetsTarget(current, target) {
   if (target === null || target === undefined || current === null || current === undefined) return null;
@@ -23,7 +33,7 @@ export function cleanTargets(draft) {
     for (const [branch, raw] of Object.entries(byBranch || {})) {
       if (raw === '' || raw === null || raw === undefined) continue;
       const n = Number(raw);
-      if (!Number.isFinite(n) || n < 0 || n > 100) continue;
+      if (!Number.isFinite(n) || n < 0 || n > limitOf(metricId)) continue;
       out[metricId][normBranch(branch)] = n;
     }
   }
@@ -37,7 +47,7 @@ export function invalidCells(draft) {
     for (const [branch, raw] of Object.entries(byBranch || {})) {
       if (raw === '' || raw === null || raw === undefined) continue;
       const n = Number(raw);
-      if (!Number.isFinite(n) || n < 0 || n > 100) bad.push({ metricId, branch, value: raw });
+      if (!Number.isFinite(n) || n < 0 || n > limitOf(metricId)) bad.push({ metricId, branch, value: raw });
     }
   }
   return bad;
