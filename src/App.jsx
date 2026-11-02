@@ -9,6 +9,7 @@ import {
 } from './components.jsx';
 import { BranchesPage, DataQualityPage, SettingsPage, SlaOverviewCards } from './pages.jsx';
 import { SLA } from './lib/sla.js';
+import { levelsFor, withLevels } from './lib/levels.js';
 
 const Icon = ({ d }) => (
   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
@@ -19,9 +20,9 @@ const SECTIONS = [
   { id: 'overview', kind: 'overview', group: 'المؤشرات', label: 'المؤشرات الرئيسية', icon: 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z', sub: 'ملخص مؤشرات الأداء الرئيسية' },
   { id: 'delivery', kind: 'metric', metric: 'delivery', group: 'المؤشرات', icon: 'M3 7h11v9H3zM14 10h4l3 3v3h-7zM7 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM17 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3z' },
   { id: 'firstAttempt', kind: 'metric', metric: 'firstAttempt', group: 'المؤشرات', icon: 'M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 16.9 5.9 20.4l1.5-6.8L2.2 9l6.9-.7z' },
-  { id: 'branches', kind: 'branches', group: 'المؤشرات', label: 'الفروع', icon: 'M12 21s7-6.2 7-11.5A7 7 0 005 9.5C5 14.8 12 21 12 21zM12 12a2.5 2.5 0 100-5 2.5 2.5 0 000 5z', sub: SLA.description },
+  { id: 'branches', kind: 'branches', group: 'المؤشرات', label: 'Branch SLA', icon: 'M12 21s7-6.2 7-11.5A7 7 0 005 9.5C5 14.8 12 21 12 21zM12 12a2.5 2.5 0 100-5 2.5 2.5 0 000 5z', sub: SLA.description },
   { id: 'quality', kind: 'quality', group: 'أدوات', label: 'جودة البيانات', icon: 'M9 12l2 2 4-4M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z', sub: 'تغطية الشهور وفحص البيانات والتصنيف — منفصلة عن المؤشرات' },
-  { id: 'settings', kind: 'settings', group: 'أدوات', label: 'الإعدادات', icon: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z', sub: 'تارجت الفروع لكل مؤشر (نسبة التسليم، First Attempt، SLA)' },
+  { id: 'settings', kind: 'settings', group: 'أدوات', label: 'الإعدادات', icon: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z', sub: 'مقاييس التقييم (مقبول / المطلوب / ممتاز) وتارجت الفروع لكل مؤشر' },
 ];
 const sectionLabel = (x) => (x.metric ? METRICS[x.metric].label : x.label);
 const sectionSub = (x) => (x.metric ? METRICS[x.metric].description : x.sub);
@@ -120,9 +121,14 @@ export default function App() {
 
   const opts = useMemo(() => ({ method, minShipments }), [method, minShipments]);
   const hasBranches = !!(data && Array.isArray(data.branches) && data.clients.some((c) => c.b));
+  const dLevels = JSON.stringify(levelsFor(targets, 'delivery').map((l) => l.minDelta));
+  const fLevels = JSON.stringify(levelsFor(targets, 'firstAttempt').map((l) => l.minDelta));
+  const slaLevels = useMemo(() => levelsFor(targets, 'sla'), [targets]);
+  const deliveryMetric = useMemo(() => withLevels(METRICS.delivery, targets), [dLevels]); // eslint-disable-line react-hooks/exhaustive-deps
+  const firstMetric = useMemo(() => withLevels(METRICS.firstAttempt, targets), [fLevels]); // eslint-disable-line react-hooks/exhaustive-deps
   const results = {
-    delivery: useMetricResults(data, METRICS.delivery, month, opts, hasBranches),
-    firstAttempt: useMetricResults(data, METRICS.firstAttempt, month, opts, hasBranches),
+    delivery: useMetricResults(data, deliveryMetric, month, opts, hasBranches),
+    firstAttempt: useMetricResults(data, firstMetric, month, opts, hasBranches),
   };
   const months = results.delivery.trend; // same eligible months for every KPI
   useEffect(() => {
@@ -214,10 +220,10 @@ export default function App() {
             {current.kind === 'overview' && months.length > 0 && (
               <section className="group">
                 <div className="group-head">
-                  <h2>{SLA.label} — الفروع</h2>
+                  <h2>Branch SLA</h2>
                   <button className="link" onClick={() => setSection('branches')}>عرض التفاصيل ←</button>
                 </div>
-                <SlaOverviewCards data={data} delivery={results.delivery} />
+                <SlaOverviewCards data={data} delivery={results.delivery} levels={slaLevels} />
               </section>
             )}
 
@@ -225,7 +231,7 @@ export default function App() {
               <MetricPage m={cur} month={month} setMonth={setMonth} hasBranches={hasBranches} targets={targets} />
             ))}
 
-            {current.kind === 'branches' && months.length > 0 && <BranchesPage data={data} delivery={results.delivery} targets={targets} />}
+            {current.kind === 'branches' && months.length > 0 && <BranchesPage data={data} delivery={results.delivery} targets={targets} levels={slaLevels} />}
 
             {current.kind === 'quality' && <DataQualityPage data={data} />}
 

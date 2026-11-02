@@ -3,6 +3,7 @@ import { MONTH_AR, METRICS } from './lib/quality.js';
 import { cleanTargets, invalidCells, meetsMaxTarget, normBranch, targetFor } from './lib/targets.js';
 import { apiChecks, monthCoverage, namesWithEntities, similarNames } from './lib/dataQuality.js';
 import { SLA, evaluateSlaBranches, thresholdsTextSla } from './lib/sla.js';
+import { LEVEL_FIELDS, DEFAULT_THRESHOLDS, isReservedKey, levelKey, thresholdsValid } from './lib/levels.js';
 import { Badge, CustomersTable, Kpi, KpiCards, num } from './components.jsx';
 
 /* ------------------------------------------------------------------ العملاء */
@@ -125,30 +126,68 @@ export function SettingsPage({ branches, targets, onSave, unavailableReason }) {
 
   const all = useMemo(() => {
     const names = new Set((branches || []).map(normBranch));
-    SETTINGS_METRICS.forEach((m) => Object.keys(targets?.[m.id] || {}).forEach((b) => names.add(b)));
+    SETTINGS_METRICS.forEach((m) => Object.keys(targets?.[m.id] || {}).filter((b) => !isReservedKey(b)).forEach((b) => names.add(b)));
     return [...names].sort((a, b) => a.localeCompare(b, 'ar'));
   }, [branches, targets]);
 
   const bad = useMemo(() => invalidCells(draft), [draft]);
-  const badKey = new Set(bad.map((b) => `${b.metricId}|${b.branch}`));
+    const badKey = new Set(bad.map((b) => `${b.metricId}|${b.branch}`));
   const dirty = JSON.stringify(cleanTargets(draft)) !== JSON.stringify(cleanTargets(toDraft(targets)));
 
   const setCell = (metricId, branch, value) => setDraft((d) => ({ ...d, [metricId]: { ...d[metricId], [branch]: value } }));
-  const applyAll = (metricId) => setDraft((d) => ({ ...d, [metricId]: Object.fromEntries(all.map((b) => [b, bulk[metricId]])) }));
+  const applyAll = (metricId) => setDraft((d) => ({
+    ...d,
+    [metricId]: { ...Object.fromEntries(Object.entries(d[metricId] || {}).filter(([k]) => isReservedKey(k))), ...Object.fromEntries(all.map((b) => [b, bulk[metricId]])) },
+  }));
+  const levelCell = (metricId, field) => draft[metricId]?.[levelKey(field)] ?? '';
+  const effective = (metricId) => Object.fromEntries(LEVEL_FIELDS.map((f) => [f, levelCell(metricId, f) === '' ? DEFAULT_THRESHOLDS[metricId][f] : levelCell(metricId, f)]));
+  const badLevels = SETTINGS_METRICS.filter((m) => !thresholdsValid(effective(m.id)));
+  const resetLevels = () => setDraft((d) => Object.fromEntries(Object.entries(d).map(([id, cells]) => [id, Object.fromEntries(Object.entries(cells).filter(([k]) => !isReservedKey(k)))])));
   const save = async () => {
     setState({ saving: true, message: '', error: '' });
-    try { await onSave(cleanTargets(draft)); setState({ saving: false, message: 'تم حفظ التارجت على السيرفر.', error: '' }); }
+    try { await onSave(cleanTargets(draft)); setState({ saving: false, message: 'تم حفظ الإعدادات على السيرفر.', error: '' }); }
     catch (e) { setState({ saving: false, message: '', error: e.message || String(e) }); }
   };
 
   if (unavailableReason) return <div className="alert warn">{unavailableReason}</div>;
   if (!all.length) return <div className="alert warn">مفيش فروع في البيانات لإدخال تارجت لها.</div>;
   return (
+    <>
+    <section className="card">
+      <h2>مقاييس التقييم</h2>
+      <p className="muted">
+        الحد الأدنى للتحسن عشان المؤشر يتقيّم «مقبول» أو «المطلوب» أو «ممتاز». نسبة التسليم وFirst Attempt: زيادة بالنقاط المئوية عن متوسط آخر 3 شهور.
+        Branch SLA: نقص في متوسط مدة التسليم بالأيام (الأسرع أحسن). الخانة الفاضية = القيمة الافتراضية. لازم مقبول ≤ المطلوب ≤ ممتاز.
+      </p>
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>المؤشر</th><th>الوحدة</th><th>مقبول</th><th>المطلوب</th><th>ممتاز</th></tr></thead>
+          <tbody>
+            {SETTINGS_METRICS.map((m) => (
+              <tr key={m.id}>
+                <td>{m.id === 'sla' ? 'Branch SLA' : m.label}</td>
+                <td>{m.id === 'sla' ? 'يوم أسرع (≥)' : 'نقطة مئوية زيادة (≥)'}</td>
+                {LEVEL_FIELDS.map((f) => (
+                  <td key={f}>
+                    <input type="number" min="0" max={m.max} step={m.step} placeholder={String(DEFAULT_THRESHOLDS[m.id][f])}
+                      className={badLevels.includes(m) ? 'invalid' : ''}
+                      value={levelCell(m.id, f)} onChange={(e) => setCell(m.id, levelKey(f), e.target.value)} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {badLevels.length > 0 && <div className="alert err" style={{ marginTop: 12 }}>ترتيب المقاييس غير صحيح في: {badLevels.map((m) => (m.id === 'sla' ? 'Branch SLA' : m.label)).join('، ')} — لازم مقبول ≤ المطلوب ≤ ممتاز، وبدون قيم سالبة.</div>}
+      <div style={{ marginTop: 10 }}><button className="btn ghost" style={{ marginTop: 0 }} onClick={resetLevels}>رجّع القيم الافتراضية</button></div>
+    </section>
+
     <section className="card">
       <h2>تارجت الفروع</h2>
       <p className="muted">
         نسبة التسليم وFirst Attempt: التارجت = النسبة المطلوب أن يحققها الفرع (٪) في الشهر المقاس، ويظهر في جدول الفروع داخل صفحة المؤشر.
-        SLA التسليم: التارجت = أقصى متوسط مدة تسليم بالأيام (الأقل أحسن)، ويظهر في صفحة «الفروع». «محقق / لم يتحقق» بيتحسب تلقائيًا.
+        SLA التسليم: التارجت = أقصى متوسط مدة تسليم بالأيام (الأقل أحسن)، ويظهر في صفحة «Branch SLA». «محقق / لم يتحقق» بيتحسب تلقائيًا.
         اترك الخانة فاضية لو مفيش تارجت. النسب بين 0 و100، والأيام بين 0 و60.
       </p>
       <div className="bulk">
@@ -182,10 +221,11 @@ export function SettingsPage({ branches, targets, onSave, unavailableReason }) {
       {state.error && <div className="alert err" style={{ marginTop: 12 }}><b>تعذر الحفظ.</b> {state.error}</div>}
       {state.message && <div className="alert" style={{ marginTop: 12 }}>{state.message}</div>}
       <div style={{ marginTop: 14 }}>
-        <button className="btn" onClick={save} disabled={state.saving || !dirty}>{state.saving ? 'جاري الحفظ…' : 'حفظ التارجت'}</button>
+        <button className="btn" onClick={save} disabled={state.saving || !dirty || badLevels.length > 0}>{state.saving ? 'جاري الحفظ…' : 'حفظ الإعدادات'}</button>
         {dirty && <span className="muted" style={{ marginInlineStart: 12 }}>فيه تغييرات لم تُحفظ</span>}
       </div>
     </section>
+    </>
   );
 }
 
@@ -208,7 +248,7 @@ function SlaTargetCells({ current, target }) {
 }
 
 /** SLA التسليم KPI cards — used by the الفروع page and by «المؤشرات الرئيسية». */
-function SlaCards({ rows, group, ev }) {
+function SlaCards({ rows, group, ev, levels }) {
   return (
     <section className="kpis">
       <Kpi title="عدد الفروع" value={num(rows.length)} sub={`${num(group.customers)} عميل محسوب (نفس عملاء باقي المؤشرات)`} />
@@ -218,31 +258,31 @@ function SlaCards({ rows, group, ev }) {
       <div className={`kpi verdict ${group.level ? `lv-${group.level.key}` : ''}`}>
         <div className="kpi-title">التقييم</div>
         <div className="kpi-value"><Badge level={group.level} /></div>
-        <div className="kpi-sub">{thresholdsTextSla()}</div>
+        <div className="kpi-sub">{thresholdsTextSla(levels)}</div>
       </div>
     </section>
   );
 }
 
 /** Branch SLA cards for the overview (computes its own numbers). */
-export function SlaOverviewCards({ data, delivery }) {
+export function SlaOverviewCards({ data, delivery, levels }) {
   const available = SLA.available(data.clients) && Array.isArray(data.branches);
   const ev = delivery?.result;
   const { rows, group } = useMemo(
-    () => (available && ev ? evaluateSlaBranches(data.clients, data.branches, ev) : { rows: [], group: null }),
-    [data, available, ev],
+    () => (available && ev ? evaluateSlaBranches(data.clients, data.branches, ev, levels) : { rows: [], group: null }),
+    [data, available, ev, levels],
   );
   if (!available) return <div className="alert warn">بيانات SLA التسليم مش موجودة في رد السيرفر. اتأكد إن الباك إند المنشور هو آخر نسخة.</div>;
   if (!ev || !group) return <div className="alert warn">مفيش بيانات كفاية لحساب SLA الفروع في الشهر المختار.</div>;
-  return <SlaCards rows={rows} group={group} ev={ev} />;
+  return <SlaCards rows={rows} group={group} ev={ev} levels={levels} />;
 }
 
-export function BranchesPage({ data, delivery, targets }) {
+export function BranchesPage({ data, delivery, targets, levels }) {
   const available = SLA.available(data.clients) && Array.isArray(data.branches);
   const ev = delivery?.result;
   const { rows, group } = useMemo(
-    () => (available && ev ? evaluateSlaBranches(data.clients, data.branches, ev) : { rows: [], group: null }),
-    [data, available, ev],
+    () => (available && ev ? evaluateSlaBranches(data.clients, data.branches, ev, levels) : { rows: [], group: null }),
+    [data, available, ev, levels],
   );
   const [sort, setSort] = useState({ key: 'improvement', dir: 'desc' });
   const [q, setQ] = useState('');
@@ -253,7 +293,7 @@ export function BranchesPage({ data, delivery, targets }) {
   }), [rows, q, sort]);
   if (!available) return <div className="alert warn">بيانات SLA التسليم مش موجودة في رد السيرفر. اتأكد إن الباك إند المنشور هو آخر نسخة من <code>backend/Code.gs</code>.</div>;
   if (!ev || !group) return <div className="alert warn">مفيش بيانات كفاية لحساب SLA الفروع في الشهر المختار.</div>;
-  const counts = Object.fromEntries(SLA.levels.map((l) => [l.key, rows.filter((r) => r.level.key === l.key).length]));
+  const counts = Object.fromEntries(levels.map((l) => [l.key, rows.filter((r) => r.level.key === l.key).length]));
   const th = (key, label) => (
     <th className="sortable" onClick={() => setSort((x) => ({ key, dir: x.key === key && x.dir === 'desc' ? 'asc' : 'desc' }))}>
       {label}{sort.key === key ? (sort.dir === 'desc' ? ' ▼' : ' ▲') : ''}
@@ -261,12 +301,12 @@ export function BranchesPage({ data, delivery, targets }) {
   );
   return (
     <>
-      <SlaCards rows={rows} group={group} ev={ev} />
+      <SlaCards rows={rows} group={group} ev={ev} levels={levels} />
 
       <section className="card">
-        <h2>الفروع — SLA التسليم ({MONTH_AR[ev.month]})</h2>
+        <h2>Branch SLA — SLA التسليم ({MONTH_AR[ev.month]})</h2>
         <div className="levels" style={{ marginBottom: 10 }}>
-          {SLA.levels.map((l) => <span key={l.key} className="lvl-chip"><Badge level={l} /> {num(counts[l.key])} فرع</span>)}
+          {levels.map((l) => <span key={l.key} className="lvl-chip"><Badge level={l} /> {num(counts[l.key])} فرع</span>)}
         </div>
         <div className="toolbar"><input placeholder="ابحث باسم الفرع…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <div className="table-wrap">

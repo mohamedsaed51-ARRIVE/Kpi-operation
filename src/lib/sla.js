@@ -14,8 +14,8 @@ export const SLA = {
   available: (clients) => clients.some((c) => Object.values(c.v).some((cell) => cell.length > 5)),
 };
 
-export const thresholdsTextSla = () => {
-  const [ex, rq, ac] = SLA.levels;
+export const thresholdsTextSla = (levels = SLA.levels) => {
+  const [ex, rq, ac] = levels;
   return `${ac.label} ≥ ${ac.minDelta} · ${rq.label} ≥ ${rq.minDelta} · ${ex.label} ≥ ${ex.minDelta} يوم أسرع`;
 };
 
@@ -25,7 +25,7 @@ const avg = (sum, n) => (n > 0 ? sum / n : null);
  * evaluated = result of evaluateMonth() (gives the eligible customers, the previous months and the measured month).
  * Returns { rows (one per branch), group } — both with baseline / current in days and improvement = baseline − current.
  */
-export function evaluateSlaBranches(clients, branches, evaluated) {
+export function evaluateSlaBranches(clients, branches, evaluated, levels = SLA.levels) {
   if (!evaluated || evaluated.error || !Array.isArray(branches)) return { rows: [], group: null };
   const { prev, month, method } = evaluated;
   const included = new Set(evaluated.rows.map((r) => r.name));
@@ -56,7 +56,7 @@ export function evaluateSlaBranches(clients, branches, evaluated) {
     else baseline = histDays / histN;
     const current = cur[0] / cur[1];
     const improvement = baseline - current; // positive = faster than before
-    return { monthAvgs, baseline, current, improvement, level: levelFor(improvement, SLA.levels), delivered: cur[1] };
+    return { monthAvgs, baseline, current, improvement, level: levelFor(improvement, levels), delivered: cur[1] };
   };
   const rows = [];
   for (const [bi, a] of acc) {
