@@ -19,7 +19,7 @@ function Badge({ level }) {
 
 function Kpi({ title, value, sub, tone }) {
   return (
-    <div className={`kpi ${tone || ''}`}>
+    <div className={`kpi ${tone ? `tone-${tone}` : ''}`}>
       <div className="kpi-title">{title}</div>
       <div className="kpi-value">{value}</div>
       {sub && <div className="kpi-sub">{sub}</div>}
@@ -181,21 +181,22 @@ function SummaryBox({ text }) {
 }
 
 function KpiCards({ result }) {
+  const g = result.group;
+  const deltaTone = g.delta === null ? '' : g.delta >= 0 ? 'good' : 'bad';
   return (
-<section className="kpis">
-                  <Kpi title="عدد العملاء" value={num(result.group.customers)}
-                    sub={`مستبعد: ${num(result.excluded.notInAllMonths)} (مش موجودين في الـ4 شهور)${result.excluded.belowMinimum ? ` + ${num(result.excluded.belowMinimum)} (أقل من الحد الأدنى)` : ''}`} />
-                  <Kpi title="متوسط التسليمات" value={pct(result.group.baseline)}
-                    sub={result.prev.map((m) => MONTH_AR[m]).join(' + ')} />
-                  <Kpi title={`متوسط التسليمات ${MONTH_AR[result.month]}`} value={pct(result.group.current)}
-                    sub={`${num(result.group.curDelivered)} تسليم + ${num(result.group.curPaid)} دفع شحن من ${num(result.group.curTotal)} شحنة`} />
-                  <Kpi title="الفرق" value={pp(result.group.delta)} sub="الفرق بين الشهرين بالنقاط المئوية" />
-                  <div className={`kpi verdict ${result.group.level ? `lv-${result.group.level.key}` : ''}`}>
-                    <div className="kpi-title">التقييم</div>
-                    <div className="kpi-value"><Badge level={result.group.level} /></div>
-                    <div className="kpi-sub">مقبول ≥ +3 · المطلوب ≥ +5 · ممتاز ≥ +7</div>
-                  </div>
-                </section>
+    <section className="kpis">
+      <Kpi title="عدد العملاء" value={num(g.customers)}
+        sub={`مستبعد: ${num(result.excluded.notInAllMonths)} (مش موجودين في الـ4 شهور)${result.excluded.belowMinimum ? ` + ${num(result.excluded.belowMinimum)} (أقل من الحد الأدنى)` : ''}`} />
+      <Kpi title="متوسط التسليمات" value={pct(g.baseline)} sub={result.prev.map((m) => MONTH_AR[m]).join(' + ')} />
+      <Kpi title={`متوسط التسليمات ${MONTH_AR[result.month]}`} value={pct(g.current)} tone="brand"
+        sub={`${num(g.curDelivered)} تسليم + ${num(g.curPaid)} دفع شحن من ${num(g.curTotal)} شحنة`} />
+      <Kpi title="الفرق" value={pp(g.delta)} tone={deltaTone} sub="الفرق بين الشهرين بالنقاط المئوية" />
+      <div className={`kpi verdict ${g.level ? `lv-${g.level.key}` : ''}`}>
+        <div className="kpi-title">التقييم</div>
+        <div className="kpi-value"><Badge level={g.level} /></div>
+        <div className="kpi-sub">مقبول ≥ +3 · المطلوب ≥ +5 · ممتاز ≥ +7</div>
+      </div>
+    </section>
   );
 }
 
@@ -254,20 +255,30 @@ function BranchesTable({ rows, result, hasData }) {
   );
 }
 
+const Icon = ({ d }) => (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
+);
+// Add a new KPI here (id, label, icon, subtitle) and render its page in <Content/> below.
+const SECTIONS = [
+  { id: 'overview', label: 'المؤشرات الرئيسية', icon: 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z', sub: 'ملخص مؤشرات الأداء الرئيسية' },
+  { id: 'delivery', label: 'نسبة التسليم', icon: 'M3 7h11v9H3zM14 10h4l3 3v3h-7zM7 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM17 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3z', sub: 'متوسط التسليمات (تسليم + رفض مع دفع الشحن) مقارنة بمتوسط آخر 3 شهور للعملاء المكررين' },
+];
+
 export default function App() {
   const demo = new URLSearchParams(location.search).has('demo');
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [updatedAt, setUpdatedAt] = useState(null);
   const [month, setMonth] = useState('');
   const [method, setMethod] = useState('pooled');
   const [minShipments, setMin] = useState(1);
-  const [tab, setTab] = useState('main');
+  const [section, setSection] = useState('overview');
 
   const load = () => {
     setLoading(true); setError('');
     (demo ? Promise.resolve(demoData()) : fetchClientMonthly())
-      .then((d) => { setData(d); })
+      .then((d) => { setData(d); setUpdatedAt(new Date()); })
       .catch((e) => setError(e.message || String(e)))
       .finally(() => setLoading(false));
   };
@@ -283,117 +294,136 @@ export default function App() {
   const hasBranches = !!(data && Array.isArray(data.branches) && data.clients.some((c) => c.b));
   const branchRows = useMemo(() => (result && !result.error && hasBranches ? evaluateBranches(data.clients, data.branches, result) : []), [data, result, hasBranches]);
 
+  const current = SECTIONS.find((x) => x.id === section);
+  const ready = result && !result.error;
+
   return (
-    <div className="app">
-      <header className="top">
-        <div>
-          <div className="brand">ARRIVE</div>
-          <h1>KPI Operation</h1>
-          <p className="sub">نسبة النجاح = (التسليم + «رفض الاستلام وتم دفع الشحن») ÷ إجمالي الشحنات، مقارنة بمتوسط آخر 3 شهور للعملاء المكررين</p>
+    <div className="shell">
+      <aside className="side">
+        <div className="side-brand">
+          <span className="logo">ARRIVE</span>
+          <span className="side-title">KPI Operation</span>
         </div>
-        <button className="btn" onClick={load} disabled={loading}>{loading ? 'جاري التحميل…' : 'تحديث'}</button>
-      </header>
+        <nav className="nav" role="tablist" aria-label="الأقسام">
+          {SECTIONS.map((x) => (
+            <button key={x.id} role="tab" aria-selected={section === x.id} className={`nav-item ${section === x.id ? 'on' : ''}`} onClick={() => setSection(x.id)}>
+              <Icon d={x.icon} /><span>{x.label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="side-foot">
+          المصدر: Google Sheets
+          {updatedAt && <div>آخر تحديث: {updatedAt.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</div>}
+        </div>
+      </aside>
 
-      {demo && <div className="alert warn">⚠ بيانات تجريبية للمعاينة فقط (<code>?demo=1</code>) — مش أرقام ARRIVE الحقيقية.</div>}
-      {error && <div className="alert err"><b>تعذر تحميل البيانات.</b> {error}</div>}
-      {loading && !data && <div className="alert">جاري تحميل البيانات من Google Sheets… (أول مرة ممكن ياخد وقت)</div>}
+      <main className="main">
+        <header className="page-head">
+          <div>
+            <h1>{current.label}</h1>
+            <p className="sub">{current.sub}</p>
+          </div>
+          <div className="head-actions">
+            {ready && <span className="period">الشهر المقاس: <b>{MONTH_AR[result.month]}</b></span>}
+            <button className="btn" onClick={load} disabled={loading}>{loading ? 'جاري التحميل…' : 'تحديث'}</button>
+          </div>
+        </header>
 
-      {data && (
-        <>
-          {(data.missingMonths?.length > 0 || data.skippedMonths?.length > 0) && (
-            <div className="alert warn">
-              شهور مفيهاش ملخص محفوظ (Snapshot) ومش داخلة في الحساب: {[...data.missingMonths, ...(data.skippedMonths || [])].map((m) => MONTH_AR[m]).join('، ')}.
-              لتضمينها شغّل «تحديث الداش بورد» للشهر ده في الداش القديمة.
-            </div>
-          )}
+        {demo && <div className="alert warn">⚠ بيانات تجريبية للمعاينة فقط (<code>?demo=1</code>) — مش أرقام ARRIVE الحقيقية.</div>}
+        {error && <div className="alert err"><b>تعذر تحميل البيانات.</b> {error}</div>}
+        {loading && !data && <div className="alert">جاري تحميل البيانات من Google Sheets… (أول مرة ممكن ياخد وقت)</div>}
 
-          <section className="controls">
-            <label>الشهر المقاس
-              <select value={month} onChange={(e) => setMonth(e.target.value)}>
-                {trend.map((t) => <option key={t.month} value={t.month}>{MONTH_AR[t.month]}</option>)}
-              </select>
-            </label>
-            <label>طريقة المتوسط
-              <select value={method} onChange={(e) => setMethod(e.target.value)}>
-                <option value="pooled">مجمّع (إجمالي ÷ إجمالي)</option>
-                <option value="mean">متوسط النسب الشهرية</option>
-              </select>
-            </label>
-            <label>أقل عدد شحنات للعميل في كل شهر
-              <input type="number" min="1" value={minShipments} onChange={(e) => setMin(Math.max(1, Number(e.target.value) || 1))} />
-            </label>
-          </section>
+        {data && (
+          <>
+            {(data.missingMonths?.length > 0 || data.skippedMonths?.length > 0) && (
+              <div className="alert warn">
+                شهور مفيهاش ملخص محفوظ (Snapshot) ومش داخلة في الحساب: {[...data.missingMonths, ...(data.skippedMonths || [])].map((m) => MONTH_AR[m]).join('، ')}.
+                لتضمينها شغّل «تحديث الداش بورد» للشهر ده في الداش القديمة.
+              </div>
+            )}
 
-          {!trend.length && <div className="alert warn">مفيش شهر معاه 3 شهور سابقة متاحة. الشهور المتاحة: {data.months.map((m) => MONTH_AR[m]).join('، ') || 'لا يوجد'}.</div>}
+            <section className="controls">
+              <label>الشهر المقاس
+                <select value={month} onChange={(e) => setMonth(e.target.value)}>
+                  {trend.map((t) => <option key={t.month} value={t.month}>{MONTH_AR[t.month]}</option>)}
+                </select>
+              </label>
+              <label>طريقة المتوسط
+                <select value={method} onChange={(e) => setMethod(e.target.value)}>
+                  <option value="pooled">مجمّع (إجمالي ÷ إجمالي)</option>
+                  <option value="mean">متوسط النسب الشهرية</option>
+                </select>
+              </label>
+              <label>أقل عدد شحنات للعميل في كل شهر
+                <input type="number" min="1" value={minShipments} onChange={(e) => setMin(Math.max(1, Number(e.target.value) || 1))} />
+              </label>
+            </section>
 
-          {result && !result.error && (
-            <>
-              <nav className="tabs" role="tablist">
-                {[['main', 'نسبة التسليم'], ['details', 'التفاصيل والتحليل']].map(([k, label]) => (
-                  <button key={k} role="tab" aria-selected={tab === k} className={`tab ${tab === k ? 'on' : ''}`} onClick={() => setTab(k)}>{label}</button>
-                ))}
-              </nav>
+            {!trend.length && <div className="alert warn">مفيش شهر معاه 3 شهور سابقة متاحة. الشهور المتاحة: {data.months.map((m) => MONTH_AR[m]).join('، ') || 'لا يوجد'}.</div>}
 
-              {tab === 'main' && (
-              <KpiCards result={result} />
-              )}
+            {ready && section === 'overview' && (
+              <section className="group">
+                <div className="group-head">
+                  <h2>نسبة التسليم</h2>
+                  <button className="link" onClick={() => setSection('delivery')}>عرض التفاصيل ←</button>
+                </div>
+                <KpiCards result={result} />
+              </section>
+            )}
 
-              {tab === 'details' && (
-                <>
-                  <KpiCards result={result} />
+            {ready && section === 'delivery' && (
+              <>
+                <KpiCards result={result} />
 
-              <section className="card">
-                    <h2>ملخص للإدارة</h2>
-                    <SummaryBox text={managementSummary(result)} />
-                  </section>
+                <section className="card">
+                  <h2>ملخص للإدارة</h2>
+                  <SummaryBox text={managementSummary(result)} />
+                </section>
 
-              <section className="card">
-                    <h2>متوسط التسليمات: الأشهر السابقة مقابل الشهر المقاس</h2>
-                    <BaselineChart result={result} />
-                    <div className="levels">
-                      {LEVELS.map((l) => <span key={l.key} className="lvl-chip"><Badge level={l} /> {num(result.levelCounts[l.key])} عميل</span>)}
-                    </div>
-                    <h3 className="sub-h">الفروع — {MONTH_AR[result.month]}</h3>
-                    <BranchesTable rows={branchRows} result={result} hasData={hasBranches} />
-                  </section>
+                <section className="card">
+                  <h2>متوسط التسليمات: الأشهر السابقة مقابل الشهر المقاس</h2>
+                  <BaselineChart result={result} />
+                  <div className="levels">
+                    {LEVELS.map((l) => <span key={l.key} className="lvl-chip"><Badge level={l} /> {num(result.levelCounts[l.key])} عميل</span>)}
+                  </div>
+                  <h3 className="sub-h">الفروع — {MONTH_AR[result.month]}</h3>
+                  <BranchesTable rows={branchRows} result={result} hasData={hasBranches} />
+                </section>
 
-              <section className="card">
-                    <h2>النتيجة شهر بشهر</h2>
-                    <TrendTable rows={trend} selected={month} onSelect={setMonth} />
-                  </section>
+                <section className="card">
+                  <h2>النتيجة شهر بشهر</h2>
+                  <TrendTable rows={trend} selected={month} onSelect={setMonth} />
+                </section>
 
-              <section className="card">
-                    <h2>تفصيل العملاء — {MONTH_AR[result.month]}</h2>
-                    <CustomersTable result={result} />
-                  </section>
-                </>
-              )}
-            </>
-          )}
+                <section className="card">
+                  <h2>تفصيل العملاء — {MONTH_AR[result.month]}</h2>
+                  <CustomersTable result={result} />
+                </section>
 
-          {tab === 'details' && (
-          <details className="card">
-            <summary>مراجعة تصنيف الحالات (للتأكد من أن «دفع الشحن» محسوب صح)</summary>
-            <p className="muted">تُحسب «دفع شحن» فقط الحالات النهائية اللي نصها فيه: {(data.paidKeywords || []).join('، ')}. أي رفض تاني (زي رفض الدفع) لا يُحسب نجاح.</p>
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>الحالة</th><th>التصنيف هنا</th><th>عدد الشحنات (كل الشهور)</th></tr></thead>
-                <tbody>
-                  {data.statusClassification.map((s) => (
-                    <tr key={s.status}>
-                      <td>{s.status}</td>
-                      <td>{s.cls === 'delivered' ? 'تسليم' : s.cls === 'paid' ? 'رفض + دفع شحن (يُحسب نجاح)' : 'رفض آخر (لا يُحسب)'}</td>
-                      <td className="n">{num(s.count)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </details>
-          )}
-        </>
-      )}
-      <footer>المصدر: Google Sheets عبر نفس Web App الداش بورد التشغيلية — <code>action=clientMonthly</code></footer>
+                <details className="card">
+                  <summary>مراجعة تصنيف الحالات (للتأكد من أن «دفع الشحن» محسوب صح)</summary>
+                  <p className="muted">تُحسب «دفع شحن» فقط الحالات النهائية اللي نصها فيه: {(data.paidKeywords || []).join('، ')}. أي رفض تاني (زي رفض الدفع) لا يُحسب نجاح.</p>
+                  <div className="table-wrap">
+                    <table>
+                      <thead><tr><th>الحالة</th><th>التصنيف هنا</th><th>عدد الشحنات (كل الشهور)</th></tr></thead>
+                      <tbody>
+                        {data.statusClassification.map((st) => (
+                          <tr key={st.status}>
+                            <td>{st.status}</td>
+                            <td>{st.cls === 'delivered' ? 'تسليم' : st.cls === 'paid' ? 'رفض + دفع شحن (يُحسب نجاح)' : 'رفض آخر (لا يُحسب)'}</td>
+                            <td className="n">{num(st.count)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              </>
+            )}
+          </>
+        )}
+        <footer>ARRIVE — KPI Operation · المصدر: Google Sheets عبر Web App الداش بورد التشغيلية</footer>
+      </main>
     </div>
   );
 }
