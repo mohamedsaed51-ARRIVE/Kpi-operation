@@ -13,7 +13,7 @@ test('summary states only calculated facts', () => {
   assert.match(s, /2 عميل مكرر/);
   assert.match(s, /استُبعد 1 عميل/);
   assert.match(s, /85\.0%/);       // baseline (240+270)/600
-  assert.match(s, /الفرق: 0\.00/); // current (90+80)/200 = 85 -> delta 0
+  assert.match(s, /الفرق: 0\.00%/); // current (90+80)/200 = 85 -> delta 0
   assert.match(s, /غير مقبول/);
   assert.match(s, /B \(-10\.00\)/);
   assert.match(s, /A \(\+10\.00\)/);

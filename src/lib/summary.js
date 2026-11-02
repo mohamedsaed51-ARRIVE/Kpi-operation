@@ -11,13 +11,13 @@ export function managementSummary(result, { topN = 5 } = {}) {
   const lines = [];
   lines.push(`ملخص جودة أداء العملاء — ${m}`);
   lines.push(`• نطاق القياس: ${g.customers} عميل مكرر (لديهم شحنات في ${prev} و${m})، واستُبعد ${result.excluded.notInAllMonths} عميل لعدم توافر الأشهر الأربعة.`);
-  lines.push(`• نسبة النجاح (التسليم + رفض الاستلام مع دفع الشحن): ${p(g.current)} في ${m} مقابل خط أساس ${p(g.baseline)} (متوسط ${prev}).`);
-  lines.push(`• الفرق: ${d(g.delta)} نقطة مئوية ← التقييم: ${g.level.label}.`);
+  lines.push(`• نسبة النجاح (التسليم + رفض الاستلام مع دفع الشحن): ${p(g.current)} في ${m} مقابل متوسط ${p(g.baseline)} في ${prev}.`);
+  lines.push(`• الفرق: ${d(g.delta)}% ← التقييم: ${g.level.label}.`);
   const lc = result.levelCounts;
   lines.push(`• توزيع العملاء: ممتاز ${lc.excellent} · المطلوب ${lc.required} · مقبول ${lc.acceptable} · غير مقبول ${lc.below}.`);
   const byDelta = [...result.rows].sort((a, b) => a.delta - b.delta);
   const worst = byDelta.slice(0, topN).filter((r) => r.delta < 0);
-  if (worst.length) lines.push(`• أكبر تراجع عن الخط الأساسي: ${worst.map((r) => `${r.name} (${d(r.delta)})`).join('، ')}.`);
+  if (worst.length) lines.push(`• أكبر تراجع عن متوسط الأشهر السابقة: ${worst.map((r) => `${r.name} (${d(r.delta)})`).join('، ')}.`);
   const best = byDelta.slice(-topN).reverse().filter((r) => r.delta > 0);
   if (best.length) lines.push(`• أكبر تحسن: ${best.map((r) => `${r.name} (${d(r.delta)})`).join('، ')}.`);
   return lines.join('\n');

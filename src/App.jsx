@@ -8,6 +8,7 @@ import {
 
 const pct = (v, d = 1) => (v === null || v === undefined ? '—' : `${v.toFixed(d)}%`);
 const pts = (v, d = 2) => (v === null || v === undefined ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(d)} نقطة`);
+const pp = (v, d = 2) => (v === null || v === undefined ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(d)}%`);
 const num = (v) => (v ?? 0).toLocaleString('en-US');
 const ICON = { excellent: '★', required: '✔', acceptable: '◐', below: '✖' };
 
@@ -35,7 +36,7 @@ function BaselineChart({ result }) {
     { label: MONTH_AR[result.month], value: g.current, kind: 'cur' },
   ];
   const lines = [
-    { y: g.baseline, label: 'خط الأساس', cls: 'base' },
+    { y: g.baseline, label: 'المتوسط', cls: 'base' },
     ...[3, 5, 7].map((d, i) => ({ y: g.baseline + d, label: `+${d}`, cls: ['l3', 'l5', 'l7'][i] })),
   ];
   const all = [...bars.map((b) => b.value), ...lines.map((l) => l.y)];
@@ -47,7 +48,7 @@ function BaselineChart({ result }) {
   const y = (v) => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
   const ticks = Array.from({ length: 5 }, (_, i) => lo + ((hi - lo) / 4) * i);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label="مقارنة نسبة النجاح بخط الأساس">
+    <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label="مقارنة متوسط التسليمات بالشهر المقاس">
       {ticks.map((t) => (
         <g key={t}>
           <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} className="grid" />
@@ -64,7 +65,7 @@ function BaselineChart({ result }) {
       {lines.map((l) => (
         <g key={l.label}>
           <line x1={L} x2={W - R + 6} y1={y(l.y)} y2={y(l.y)} className={`tline ${l.cls}`} />
-          <text x={W - R + 10} y={y(l.y) + 4} className={`tlabel ${l.cls}`}>{l.label === 'خط الأساس' ? `الأساس ${l.y.toFixed(1)}` : `${l.label} (${l.y.toFixed(1)})`}</text>
+          <text x={W - R + 10} y={y(l.y) + 4} className={`tlabel ${l.cls}`}>{l.label === 'المتوسط' ? `المتوسط ${l.y.toFixed(1)}` : `${l.label} (${l.y.toFixed(1)})`}</text>
         </g>
       ))}
     </svg>
@@ -77,7 +78,7 @@ function TrendTable({ rows, selected, onSelect }) {
     <div className="table-wrap">
       <table>
         <thead>
-          <tr><th>الشهر</th><th>خط الأساس</th><th>النسبة الحالية</th><th>الفرق</th><th>التقييم</th><th>عملاء محسوبين</th></tr>
+          <tr><th>الشهر</th><th>متوسط التسليمات</th><th>النسبة الحالية</th><th>الفرق</th><th>التقييم</th><th>عملاء محسوبين</th></tr>
         </thead>
         <tbody>
           {rows.map((r) => (
@@ -116,7 +117,7 @@ function CustomersTable({ result }) {
     </th>
   );
   const exportCsv = () => {
-    const head = ['العميل', ...result.prev.map((m) => `نسبة ${MONTH_AR[m]}`), 'خط الأساس', `نسبة ${MONTH_AR[result.month]}`, 'الفرق (نقطة)', 'التقييم', `شحنات ${MONTH_AR[result.month]}`];
+    const head = ['العميل', ...result.prev.map((m) => `نسبة ${MONTH_AR[m]}`), 'متوسط التسليمات', `نسبة ${MONTH_AR[result.month]}`, 'الفرق (نقطة)', 'التقييم', `شحنات ${MONTH_AR[result.month]}`];
     const lines = rows.map((r) => [r.name, ...r.monthlyRates.map((x) => x.toFixed(2)), r.baseline.toFixed(2), r.current.toFixed(2), r.delta.toFixed(2), r.level.label, r.curTotal]);
     const csv = '﻿' + [head, ...lines].map((l) => l.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const a = document.createElement('a');
@@ -139,7 +140,7 @@ function CustomersTable({ result }) {
             <tr>
               {th('name', 'العميل')}
               {result.prev.map((m) => <th key={m}>{MONTH_AR[m]}</th>)}
-              {th('baseline', 'خط الأساس')}
+              {th('baseline', 'متوسط التسليمات')}
               {th('current', `نسبة ${MONTH_AR[result.month]}`)}
               {th('delta', 'الفرق')}
               <th>التقييم</th>
@@ -250,16 +251,18 @@ export default function App() {
           {result && !result.error && (
             <>
               <section className="kpis">
-                <Kpi title={`خط الأساس (متوسط ${result.prev.map((m) => MONTH_AR[m]).join(' + ')})`} value={pct(result.group.baseline)} />
-                <Kpi title={`نسبة ${MONTH_AR[result.month]}`} value={pct(result.group.current)} sub={`${num(result.group.curDelivered)} تسليم + ${num(result.group.curPaid)} دفع شحن من ${num(result.group.curTotal)} شحنة`} />
-                <Kpi title="الفرق عن خط الأساس" value={pts(result.group.delta)} />
+                <Kpi title="عدد العملاء" value={num(result.group.customers)}
+                  sub={`مستبعد: ${num(result.excluded.notInAllMonths)} (مش موجودين في الـ4 شهور)${result.excluded.belowMinimum ? ` + ${num(result.excluded.belowMinimum)} (أقل من الحد الأدنى)` : ''}`} />
+                <Kpi title="متوسط التسليمات" value={pct(result.group.baseline)}
+                  sub={result.prev.map((m) => MONTH_AR[m]).join(' + ')} />
+                <Kpi title={`متوسط التسليمات ${MONTH_AR[result.month]}`} value={pct(result.group.current)}
+                  sub={`${num(result.group.curDelivered)} تسليم + ${num(result.group.curPaid)} دفع شحن من ${num(result.group.curTotal)} شحنة`} />
+                <Kpi title="الفرق" value={pp(result.group.delta)} sub="الفرق بين الشهرين بالنقاط المئوية" />
                 <div className={`kpi verdict ${result.group.level ? `lv-${result.group.level.key}` : ''}`}>
                   <div className="kpi-title">التقييم</div>
                   <div className="kpi-value"><Badge level={result.group.level} /></div>
                   <div className="kpi-sub">مقبول ≥ +3 · المطلوب ≥ +5 · ممتاز ≥ +7</div>
                 </div>
-                <Kpi title="العملاء المحسوبين" value={num(result.group.customers)}
-                  sub={`مستبعد: ${num(result.excluded.notInAllMonths)} (مش موجودين في الـ4 شهور)${result.excluded.belowMinimum ? ` + ${num(result.excluded.belowMinimum)} (أقل من الحد الأدنى)` : ''}`} />
               </section>
 
               <section className="card">
@@ -268,7 +271,7 @@ export default function App() {
               </section>
 
               <section className="card">
-                <h2>النسبة الحالية مقابل خط الأساس</h2>
+                <h2>متوسط التسليمات: الأشهر السابقة مقابل الشهر المقاس</h2>
                 <BaselineChart result={result} />
                 <div className="levels">
                   {LEVELS.map((l) => <span key={l.key} className="lvl-chip"><Badge level={l} /> {num(result.levelCounts[l.key])} عميل</span>)}
