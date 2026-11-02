@@ -207,6 +207,36 @@ function SlaTargetCells({ current, target }) {
   );
 }
 
+/** SLA التسليم KPI cards — used by the الفروع page and by «المؤشرات الرئيسية». */
+function SlaCards({ rows, group, ev }) {
+  return (
+    <section className="kpis">
+      <Kpi title="عدد الفروع" value={num(rows.length)} sub={`${num(group.customers)} عميل محسوب (نفس عملاء باقي المؤشرات)`} />
+      <Kpi title={SLA.avgLabel} value={`${d2(group.baseline)} يوم`} sub={ev.prev.map((m) => MONTH_AR[m]).join(' + ')} />
+      <Kpi title={`${SLA.avgLabel} ${MONTH_AR[ev.month]}`} value={`${d2(group.current)} يوم`} tone="brand" sub={`${num(group.delivered)} شحنة مسلّمة`} />
+      <Kpi title="التحسن" value={`${imp(group.improvement)} يوم`} tone={group.improvement >= 0 ? 'good' : 'bad'} sub="الموجب = أسرع من متوسط الأشهر السابقة" />
+      <div className={`kpi verdict ${group.level ? `lv-${group.level.key}` : ''}`}>
+        <div className="kpi-title">التقييم</div>
+        <div className="kpi-value"><Badge level={group.level} /></div>
+        <div className="kpi-sub">{thresholdsTextSla()}</div>
+      </div>
+    </section>
+  );
+}
+
+/** Branch SLA cards for the overview (computes its own numbers). */
+export function SlaOverviewCards({ data, delivery }) {
+  const available = SLA.available(data.clients) && Array.isArray(data.branches);
+  const ev = delivery?.result;
+  const { rows, group } = useMemo(
+    () => (available && ev ? evaluateSlaBranches(data.clients, data.branches, ev) : { rows: [], group: null }),
+    [data, available, ev],
+  );
+  if (!available) return <div className="alert warn">بيانات SLA التسليم مش موجودة في رد السيرفر. اتأكد إن الباك إند المنشور هو آخر نسخة.</div>;
+  if (!ev || !group) return <div className="alert warn">مفيش بيانات كفاية لحساب SLA الفروع في الشهر المختار.</div>;
+  return <SlaCards rows={rows} group={group} ev={ev} />;
+}
+
 export function BranchesPage({ data, delivery, targets }) {
   const available = SLA.available(data.clients) && Array.isArray(data.branches);
   const ev = delivery?.result;
@@ -231,17 +261,7 @@ export function BranchesPage({ data, delivery, targets }) {
   );
   return (
     <>
-      <section className="kpis">
-        <Kpi title="عدد الفروع" value={num(rows.length)} sub={`${num(group.customers)} عميل محسوب (نفس عملاء باقي المؤشرات)`} />
-        <Kpi title={SLA.avgLabel} value={`${d2(group.baseline)} يوم`} sub={ev.prev.map((m) => MONTH_AR[m]).join(' + ')} />
-        <Kpi title={`${SLA.avgLabel} ${MONTH_AR[ev.month]}`} value={`${d2(group.current)} يوم`} tone="brand" sub={`${num(group.delivered)} شحنة مسلّمة`} />
-        <Kpi title="التحسن" value={`${imp(group.improvement)} يوم`} tone={group.improvement >= 0 ? 'good' : 'bad'} sub="الموجب = أسرع من متوسط الأشهر السابقة" />
-        <div className={`kpi verdict ${group.level ? `lv-${group.level.key}` : ''}`}>
-          <div className="kpi-title">التقييم</div>
-          <div className="kpi-value"><Badge level={group.level} /></div>
-          <div className="kpi-sub">{thresholdsTextSla()}</div>
-        </div>
-      </section>
+      <SlaCards rows={rows} group={group} ev={ev} />
 
       <section className="card">
         <h2>الفروع — SLA التسليم ({MONTH_AR[ev.month]})</h2>

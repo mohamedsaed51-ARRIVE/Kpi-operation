@@ -7,7 +7,7 @@ import { METRICS, MONTH_AR, evaluateAllMonths, evaluateBranches, evaluateMonth }
 import {
   Badge, BaselineChart, BranchesTable, CustomersTable, KpiCards, SummaryBox, TrendTable, num,
 } from './components.jsx';
-import { BranchesPage, CustomersPage, DataQualityPage, SettingsPage } from './pages.jsx';
+import { BranchesPage, DataQualityPage, SettingsPage, SlaOverviewCards } from './pages.jsx';
 import { SLA } from './lib/sla.js';
 
 const Icon = ({ d }) => (
@@ -20,7 +20,6 @@ const SECTIONS = [
   { id: 'delivery', kind: 'metric', metric: 'delivery', group: 'المؤشرات', icon: 'M3 7h11v9H3zM14 10h4l3 3v3h-7zM7 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM17 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3z' },
   { id: 'firstAttempt', kind: 'metric', metric: 'firstAttempt', group: 'المؤشرات', icon: 'M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 16.9 5.9 20.4l1.5-6.8L2.2 9l6.9-.7z' },
   { id: 'branches', kind: 'branches', group: 'المؤشرات', label: 'الفروع', icon: 'M12 21s7-6.2 7-11.5A7 7 0 005 9.5C5 14.8 12 21 12 21zM12 12a2.5 2.5 0 100-5 2.5 2.5 0 000 5z', sub: SLA.description },
-  { id: 'customers', kind: 'customers', group: 'المؤشرات', label: 'العملاء', icon: 'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM22 21v-2a4 4 0 00-3-3.9M16 3.1a4 4 0 010 7.8', sub: 'أداء كل عميل على المؤشرات مقارنة بمتوسط آخر 3 شهور' },
   { id: 'quality', kind: 'quality', group: 'أدوات', label: 'جودة البيانات', icon: 'M9 12l2 2 4-4M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z', sub: 'تغطية الشهور وفحص البيانات والتصنيف — منفصلة عن المؤشرات' },
   { id: 'settings', kind: 'settings', group: 'أدوات', label: 'الإعدادات', icon: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z', sub: 'تارجت الفروع لكل مؤشر (نسبة التسليم، First Attempt، SLA)' },
 ];
@@ -90,7 +89,7 @@ const NeedsUpdate = () => (
   </div>
 );
 
-const needsControls = (kind) => kind === 'overview' || kind === 'metric' || kind === 'customers' || kind === 'branches';
+const needsControls = (kind) => kind === 'overview' || kind === 'metric' || kind === 'branches';
 
 export default function App() {
   const demo = new URLSearchParams(location.search).has('demo');
@@ -212,13 +211,21 @@ export default function App() {
               );
             })}
 
+            {current.kind === 'overview' && months.length > 0 && (
+              <section className="group">
+                <div className="group-head">
+                  <h2>{SLA.label} — الفروع</h2>
+                  <button className="link" onClick={() => setSection('branches')}>عرض التفاصيل ←</button>
+                </div>
+                <SlaOverviewCards data={data} delivery={results.delivery} />
+              </section>
+            )}
+
             {current.kind === 'metric' && cur && (!cur.available ? <NeedsUpdate /> : cur.result && (
               <MetricPage m={cur} month={month} setMonth={setMonth} hasBranches={hasBranches} targets={targets} />
             ))}
 
             {current.kind === 'branches' && months.length > 0 && <BranchesPage data={data} delivery={results.delivery} targets={targets} />}
-
-            {current.kind === 'customers' && months.length > 0 && <CustomersPage results={results} />}
 
             {current.kind === 'quality' && <DataQualityPage data={data} />}
 
