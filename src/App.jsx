@@ -3,7 +3,7 @@ import { fetchClientMonthly } from './api.js';
 import { demoData } from './demo.js';
 import { managementSummary } from './lib/summary.js';
 import {
-  LEVELS, MONTH_AR, MONTH_ORDER, evaluateAllMonths, evaluateBranches, evaluateMonth,
+  METRICS, MONTH_AR, evaluateAllMonths, evaluateBranches, evaluateMonth, thresholdsText,
 } from './lib/quality.js';
 
 const pct = (v, d = 1) => (v === null || v === undefined ? '—' : `${v.toFixed(d)}%`);
@@ -37,7 +37,7 @@ function BaselineChart({ result }) {
   ];
   const lines = [
     { y: g.baseline, label: 'المتوسط', cls: 'base' },
-    ...[3, 5, 7].map((d, i) => ({ y: g.baseline + d, label: `+${d}`, cls: ['l3', 'l5', 'l7'][i] })),
+    ...[...result.metric.levels].slice(0, 3).reverse().map((l, i) => ({ y: g.baseline + l.minDelta, label: `+${l.minDelta}`, cls: ['l3', 'l5', 'l7'][i] })).filter((l) => l.y <= 100),
   ];
   const all = [...bars.map((b) => b.value), ...lines.map((l) => l.y)];
   const lo = Math.max(0, Math.floor(Math.min(...all) - 4));
@@ -48,7 +48,7 @@ function BaselineChart({ result }) {
   const y = (v) => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
   const ticks = Array.from({ length: 5 }, (_, i) => lo + ((hi - lo) / 4) * i);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label="مقارنة متوسط التسليمات بالشهر المقاس">
+    <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label={`مقارنة ${result.metric.avgLabel} بالشهر المقاس`}>
       {ticks.map((t) => (
         <g key={t}>
           <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} className="grid" />
@@ -122,7 +122,7 @@ function CustomersTable({ result }) {
     const csv = '﻿' + [head, ...lines].map((l) => l.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    a.download = `kpi-operation-${result.month}.csv`; a.click();
+    a.download = `kpi-${result.metric.id}-${result.month}.csv`; a.click();
   };
   return (
     <>
@@ -130,7 +130,7 @@ function CustomersTable({ result }) {
         <input placeholder="ابحث باسم العميل…" value={q} onChange={(e) => setQ(e.target.value)} />
         <select value={lv} onChange={(e) => setLv(e.target.value)}>
           <option value="all">كل التقييمات ({result.rows.length})</option>
-          {LEVELS.map((l) => <option key={l.key} value={l.key}>{l.label} ({result.levelCounts[l.key]})</option>)}
+          {result.metric.levels.map((l) => <option key={l.key} value={l.key}>{l.label} ({result.levelCounts[l.key]})</option>)}
         </select>
         <button className="btn" onClick={exportCsv}>تصدير CSV</button>
       </div>
@@ -181,20 +181,19 @@ function SummaryBox({ text }) {
 }
 
 function KpiCards({ result }) {
-  const g = result.group;
+  const g = result.group, metric = result.metric;
   const deltaTone = g.delta === null ? '' : g.delta >= 0 ? 'good' : 'bad';
   return (
     <section className="kpis">
       <Kpi title="عدد العملاء" value={num(g.customers)}
         sub={`مستبعد: ${num(result.excluded.notInAllMonths)} (مش موجودين في الـ4 شهور)${result.excluded.belowMinimum ? ` + ${num(result.excluded.belowMinimum)} (أقل من الحد الأدنى)` : ''}`} />
-      <Kpi title="متوسط التسليمات" value={pct(g.baseline)} sub={result.prev.map((m) => MONTH_AR[m]).join(' + ')} />
-      <Kpi title={`متوسط التسليمات ${MONTH_AR[result.month]}`} value={pct(g.current)} tone="brand"
-        sub={`${num(g.curDelivered)} تسليم + ${num(g.curPaid)} دفع شحن من ${num(g.curTotal)} شحنة`} />
+      <Kpi title={metric.avgLabel} value={pct(g.baseline)} sub={result.prev.map((m) => MONTH_AR[m]).join(' + ')} />
+      <Kpi title={`${metric.avgLabel} ${MONTH_AR[result.month]}`} value={pct(g.current)} tone="brand" sub={metric.successText(g)} />
       <Kpi title="الفرق" value={pp(g.delta)} tone={deltaTone} sub="الفرق بين الشهرين بالنقاط المئوية" />
       <div className={`kpi verdict ${g.level ? `lv-${g.level.key}` : ''}`}>
         <div className="kpi-title">التقييم</div>
         <div className="kpi-value"><Badge level={g.level} /></div>
-        <div className="kpi-sub">مقبول ≥ +3 · المطلوب ≥ +5 · ممتاز ≥ +7</div>
+        <div className="kpi-sub">{thresholdsText(metric)}</div>
       </div>
     </section>
   );
@@ -258,11 +257,97 @@ function BranchesTable({ rows, result, hasData }) {
 const Icon = ({ d }) => (
   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
 );
-// Add a new KPI here (id, label, icon, subtitle) and render its page in <Content/> below.
+// To add a KPI: add an entry here (and a METRICS entry in src/lib/quality.js), then it appears in the sidebar,
+// in «المؤشرات الرئيسية» and gets its own page.
 const SECTIONS = [
   { id: 'overview', label: 'المؤشرات الرئيسية', icon: 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z', sub: 'ملخص مؤشرات الأداء الرئيسية' },
-  { id: 'delivery', label: 'نسبة التسليم', icon: 'M3 7h11v9H3zM14 10h4l3 3v3h-7zM7 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM17 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3z', sub: 'متوسط التسليمات (تسليم + رفض مع دفع الشحن) مقارنة بمتوسط آخر 3 شهور للعملاء المكررين' },
+  { id: 'delivery', metric: 'delivery', icon: 'M3 7h11v9H3zM14 10h4l3 3v3h-7zM7 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM17 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3z' },
+  { id: 'firstAttempt', metric: 'firstAttempt', icon: 'M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 16.9 5.9 20.4l1.5-6.8L2.2 9l6.9-.7z' },
 ];
+const sectionLabel = (x) => (x.metric ? METRICS[x.metric].label : x.label);
+const sectionSub = (x) => (x.metric ? METRICS[x.metric].description : x.sub);
+
+/** Everything computed for one KPI (metric) so every KPI page uses the same engine. */
+function useMetricResults(data, metric, month, opts, hasBranches) {
+  const available = !!data && metric.available(data.clients);
+  const o = useMemo(() => ({ ...opts, metric }), [opts.method, opts.minShipments, metric]); // eslint-disable-line react-hooks/exhaustive-deps
+  const trend = useMemo(() => (available ? evaluateAllMonths(data.clients, data.months, o) : []), [data, available, o]);
+  const result = useMemo(() => (available && month ? evaluateMonth(data.clients, month, o) : null), [data, available, month, o]);
+  const branchRows = useMemo(() => (result && !result.error && hasBranches ? evaluateBranches(data.clients, data.branches, result) : []), [data, result, hasBranches]);
+  return { available, trend, result: result && !result.error ? result : null, branchRows };
+}
+
+function MetricPage({ data, m, month, setMonth, hasBranches }) {
+  const { result, trend, branchRows } = m;
+  const metric = result.metric;
+  return (
+    <>
+      <KpiCards result={result} />
+
+      <section className="card">
+        <h2>ملخص للإدارة</h2>
+        <SummaryBox text={managementSummary(result)} />
+      </section>
+
+      <section className="card">
+        <h2>{metric.avgLabel}: الأشهر السابقة مقابل الشهر المقاس</h2>
+        <BaselineChart result={result} />
+        <div className="levels">
+          {metric.levels.map((l) => <span key={l.key} className="lvl-chip"><Badge level={l} /> {num(result.levelCounts[l.key])} عميل</span>)}
+        </div>
+        <h3 className="sub-h">الفروع — {MONTH_AR[result.month]}</h3>
+        <BranchesTable rows={branchRows} result={result} hasData={hasBranches} />
+      </section>
+
+      <section className="card">
+        <h2>النتيجة شهر بشهر</h2>
+        <TrendTable rows={trend} selected={month} onSelect={setMonth} />
+      </section>
+
+      <section className="card">
+        <h2>تفصيل العملاء — {MONTH_AR[result.month]}</h2>
+        <CustomersTable result={result} />
+      </section>
+
+      {metric.id === 'delivery' ? (
+        <details className="card">
+          <summary>مراجعة تصنيف الحالات (للتأكد من أن «دفع الشحن» محسوب صح)</summary>
+          <p className="muted">تُحسب «دفع شحن» فقط الحالات النهائية اللي نصها فيه: {(data.paidKeywords || []).join('، ')}. أي رفض تاني (زي رفض الدفع) لا يُحسب نجاح.</p>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>الحالة</th><th>التصنيف هنا</th><th>عدد الشحنات (كل الشهور)</th></tr></thead>
+              <tbody>
+                {data.statusClassification.map((st) => (
+                  <tr key={st.status}>
+                    <td>{st.status}</td>
+                    <td>{st.cls === 'delivered' ? 'تسليم' : st.cls === 'paid' ? 'رفض + دفع شحن (يُحسب نجاح)' : 'رفض آخر (لا يُحسب)'}</td>
+                    <td className="n">{num(st.count)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      ) : (
+        <details className="card">
+          <summary>تعريف First Attempt</summary>
+          <p className="muted">
+            شحنة «تسليم من أول محاولة» = شحنة حالتها «تسليم ناجح» وتصنيف محاولتها «محاولة أولى» بنفس قاعدة الداش التشغيلية
+            (الفرق بين تاريخ الاستلام وتاريخ آخر حالة لا يزيد عن الحد المضبوط للمحاولة الأولى، الافتراضي يوم واحد).
+            الرفض (بنوعيه) والمرتجع وقيد التشغيل لا يُحسبون نجاحًا. نسبة العميل = التسليم من أول محاولة ÷ إجمالي شحناته في الشهر.
+          </p>
+        </details>
+      )}
+    </>
+  );
+}
+
+const NeedsUpdate = () => (
+  <div className="alert warn">
+    بيانات First Attempt مش موجودة في رد السيرفر. السيرفر لسه على نسخة قديمة من <code>Code.gs</code>: حدّث الكود في Apps Script
+    (من <code>apps-script-Code.gs</code>) واعمل Deploy جديد على نفس الـ Deployment، وبعدها حدّث الصفحة.
+  </div>
+);
 
 export default function App() {
   const demo = new URLSearchParams(location.search).has('demo');
@@ -284,18 +369,20 @@ export default function App() {
   };
   useEffect(load, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const opts = { method, minShipments };
-  const trend = useMemo(() => (data ? evaluateAllMonths(data.clients, data.months, opts) : []), [data, method, minShipments]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (data && trend.length && !trend.some((t) => t.month === month)) setMonth(trend[trend.length - 1].month);
-  }, [data, trend, month]);
-  const result = useMemo(() => (data && month ? evaluateMonth(data.clients, month, opts) : null), [data, month, method, minShipments]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  const opts = useMemo(() => ({ method, minShipments }), [method, minShipments]);
   const hasBranches = !!(data && Array.isArray(data.branches) && data.clients.some((c) => c.b));
-  const branchRows = useMemo(() => (result && !result.error && hasBranches ? evaluateBranches(data.clients, data.branches, result) : []), [data, result, hasBranches]);
+  const results = {
+    delivery: useMetricResults(data, METRICS.delivery, month, opts, hasBranches),
+    firstAttempt: useMetricResults(data, METRICS.firstAttempt, month, opts, hasBranches),
+  };
+  const months = results.delivery.trend; // same eligible months for every KPI
+  useEffect(() => {
+    if (data && months.length && !months.some((t) => t.month === month)) setMonth(months[months.length - 1].month);
+  }, [data, months, month]);
 
   const current = SECTIONS.find((x) => x.id === section);
-  const ready = result && !result.error;
+  const cur = current.metric ? results[current.metric] : null;
+  const monthShown = results.delivery.result?.month;
 
   return (
     <div className="shell">
@@ -307,7 +394,7 @@ export default function App() {
         <nav className="nav" role="tablist" aria-label="الأقسام">
           {SECTIONS.map((x) => (
             <button key={x.id} role="tab" aria-selected={section === x.id} className={`nav-item ${section === x.id ? 'on' : ''}`} onClick={() => setSection(x.id)}>
-              <Icon d={x.icon} /><span>{x.label}</span>
+              <Icon d={x.icon} /><span>{sectionLabel(x)}</span>
             </button>
           ))}
         </nav>
@@ -320,11 +407,11 @@ export default function App() {
       <main className="main">
         <header className="page-head">
           <div>
-            <h1>{current.label}</h1>
-            <p className="sub">{current.sub}</p>
+            <h1>{sectionLabel(current)}</h1>
+            <p className="sub">{sectionSub(current)}</p>
           </div>
           <div className="head-actions">
-            {ready && <span className="period">الشهر المقاس: <b>{MONTH_AR[result.month]}</b></span>}
+            {monthShown && <span className="period">الشهر المقاس: <b>{MONTH_AR[monthShown]}</b></span>}
             <button className="btn" onClick={load} disabled={loading}>{loading ? 'جاري التحميل…' : 'تحديث'}</button>
           </div>
         </header>
@@ -345,7 +432,7 @@ export default function App() {
             <section className="controls">
               <label>الشهر المقاس
                 <select value={month} onChange={(e) => setMonth(e.target.value)}>
-                  {trend.map((t) => <option key={t.month} value={t.month}>{MONTH_AR[t.month]}</option>)}
+                  {months.map((t) => <option key={t.month} value={t.month}>{MONTH_AR[t.month]}</option>)}
                 </select>
               </label>
               <label>طريقة المتوسط
@@ -359,67 +446,24 @@ export default function App() {
               </label>
             </section>
 
-            {!trend.length && <div className="alert warn">مفيش شهر معاه 3 شهور سابقة متاحة. الشهور المتاحة: {data.months.map((m) => MONTH_AR[m]).join('، ') || 'لا يوجد'}.</div>}
+            {!months.length && <div className="alert warn">مفيش شهر معاه 3 شهور سابقة متاحة. الشهور المتاحة: {data.months.map((m) => MONTH_AR[m]).join('، ') || 'لا يوجد'}.</div>}
 
-            {ready && section === 'overview' && (
-              <section className="group">
-                <div className="group-head">
-                  <h2>نسبة التسليم</h2>
-                  <button className="link" onClick={() => setSection('delivery')}>عرض التفاصيل ←</button>
-                </div>
-                <KpiCards result={result} />
-              </section>
-            )}
-
-            {ready && section === 'delivery' && (
-              <>
-                <KpiCards result={result} />
-
-                <section className="card">
-                  <h2>ملخص للإدارة</h2>
-                  <SummaryBox text={managementSummary(result)} />
-                </section>
-
-                <section className="card">
-                  <h2>متوسط التسليمات: الأشهر السابقة مقابل الشهر المقاس</h2>
-                  <BaselineChart result={result} />
-                  <div className="levels">
-                    {LEVELS.map((l) => <span key={l.key} className="lvl-chip"><Badge level={l} /> {num(result.levelCounts[l.key])} عميل</span>)}
+            {section === 'overview' && months.length > 0 && SECTIONS.filter((x) => x.metric).map((x) => {
+              const r = results[x.metric];
+              return (
+                <section className="group" key={x.id}>
+                  <div className="group-head">
+                    <h2>{sectionLabel(x)}</h2>
+                    <button className="link" onClick={() => setSection(x.id)}>عرض التفاصيل ←</button>
                   </div>
-                  <h3 className="sub-h">الفروع — {MONTH_AR[result.month]}</h3>
-                  <BranchesTable rows={branchRows} result={result} hasData={hasBranches} />
+                  {r.result ? <KpiCards result={r.result} /> : !r.available ? <NeedsUpdate /> : null}
                 </section>
+              );
+            })}
 
-                <section className="card">
-                  <h2>النتيجة شهر بشهر</h2>
-                  <TrendTable rows={trend} selected={month} onSelect={setMonth} />
-                </section>
-
-                <section className="card">
-                  <h2>تفصيل العملاء — {MONTH_AR[result.month]}</h2>
-                  <CustomersTable result={result} />
-                </section>
-
-                <details className="card">
-                  <summary>مراجعة تصنيف الحالات (للتأكد من أن «دفع الشحن» محسوب صح)</summary>
-                  <p className="muted">تُحسب «دفع شحن» فقط الحالات النهائية اللي نصها فيه: {(data.paidKeywords || []).join('، ')}. أي رفض تاني (زي رفض الدفع) لا يُحسب نجاح.</p>
-                  <div className="table-wrap">
-                    <table>
-                      <thead><tr><th>الحالة</th><th>التصنيف هنا</th><th>عدد الشحنات (كل الشهور)</th></tr></thead>
-                      <tbody>
-                        {data.statusClassification.map((st) => (
-                          <tr key={st.status}>
-                            <td>{st.status}</td>
-                            <td>{st.cls === 'delivered' ? 'تسليم' : st.cls === 'paid' ? 'رفض + دفع شحن (يُحسب نجاح)' : 'رفض آخر (لا يُحسب)'}</td>
-                            <td className="n">{num(st.count)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </details>
-              </>
-            )}
+            {current.metric && cur && (!cur.available ? <NeedsUpdate /> : cur.result && (
+              <MetricPage data={data} m={cur} month={month} setMonth={setMonth} hasBranches={hasBranches} />
+            ))}
           </>
         )}
         <footer>ARRIVE — KPI Operation · المصدر: Google Sheets عبر Web App الداش بورد التشغيلية</footer>

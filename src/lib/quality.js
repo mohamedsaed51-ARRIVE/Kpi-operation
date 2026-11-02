@@ -19,19 +19,57 @@ export const MONTH_AR = {
   July: 'يوليو', August: 'أغسطس', September: 'سبتمبر', October: 'أكتوبر', November: 'نوفمبر', December: 'ديسمبر',
 };
 
-export const LEVELS = [
-  { key: 'excellent', label: 'ممتاز', minDelta: 7 },
-  { key: 'required', label: 'المطلوب', minDelta: 5 },
-  { key: 'acceptable', label: 'مقبول', minDelta: 3 },
-  { key: 'below', label: 'غير مقبول', minDelta: -Infinity },
-];
-
 export const HISTORY_MONTHS = 3;
 
-export function levelFor(deltaPoints) {
+export function makeLevels({ excellent, required, acceptable }) {
+  return [
+    { key: 'excellent', label: 'ممتاز', minDelta: excellent },
+    { key: 'required', label: 'المطلوب', minDelta: required },
+    { key: 'acceptable', label: 'مقبول', minDelta: acceptable },
+    { key: 'below', label: 'غير مقبول', minDelta: -Infinity },
+  ];
+}
+
+// A KPI = which shipments count as a success + the improvement (in percentage points) needed for each level.
+// Customer cell = [total, delivered, rejected-with-shipping-paid, delivered-on-first-attempt].
+export const METRICS = {
+  delivery: {
+    id: 'delivery',
+    label: 'نسبة التسليم',
+    avgLabel: 'متوسط التسليمات',
+    description: 'متوسط التسليمات (تسليم + رفض الاستلام مع دفع الشحن) مقارنة بمتوسط آخر 3 شهور للعملاء المكررين',
+    successDescription: 'التسليم + رفض الاستلام مع دفع الشحن',
+    levels: makeLevels({ acceptable: 3, required: 5, excellent: 7 }),
+    success: (c) => (c ? c[1] + c[2] : 0),
+    successText: (g) => `${g.curDelivered.toLocaleString('en-US')} تسليم + ${g.curPaid.toLocaleString('en-US')} دفع شحن من ${g.curTotal.toLocaleString('en-US')} شحنة`,
+    available: () => true,
+  },
+  firstAttempt: {
+    id: 'firstAttempt',
+    label: 'First Attempt',
+    avgLabel: 'متوسط First Attempt',
+    description: 'متوسط التسليم من أول محاولة (بدون أي رفض) مقارنة بمتوسط آخر 3 شهور للعملاء المكررين',
+    successDescription: 'التسليم من أول محاولة',
+    levels: makeLevels({ acceptable: 3, required: 6, excellent: 10 }),
+    success: (c) => (c ? c[3] || 0 : 0),
+    successText: (g) => `${g.curSuccess.toLocaleString('en-US')} تسليم من أول محاولة من ${g.curTotal.toLocaleString('en-US')} شحنة`,
+    // the 4th value only exists when the Apps Script is the version that returns first-attempt counts
+    available: (clients) => clients.some((c) => Object.values(c.v).some((cell) => cell.length > 3)),
+  },
+};
+
+export const LEVELS = METRICS.delivery.levels; // kept for callers that only need the default (delivery) levels
+
+export function levelFor(deltaPoints, levels = LEVELS) {
   if (deltaPoints === null || deltaPoints === undefined || Number.isNaN(deltaPoints)) return null;
-  for (const l of LEVELS) if (deltaPoints >= l.minDelta) return l;
-  return LEVELS[LEVELS.length - 1];
+  // tiny tolerance so floating-point noise (e.g. 5.9999999999 for an exact +6) never drops a customer a level
+  for (const l of levels) if (deltaPoints + 1e-9 >= l.minDelta) return l;
+  return levels[levels.length - 1];
+}
+
+export function thresholdsText(metric) {
+  const [ex, rq, ac] = metric.levels;
+  return `${ac.label} ≥ +${ac.minDelta} · ${rq.label} ≥ +${rq.minDelta} · ${ex.label} ≥ +${ex.minDelta}`;
 }
 
 /** The `HISTORY_MONTHS` calendar months immediately before `month` (oldest first), or null when the year start is hit. */
@@ -41,7 +79,6 @@ export function previousMonths(month, count = HISTORY_MONTHS) {
   return MONTH_ORDER.slice(i - count, i);
 }
 
-const ok = (cell) => (cell ? cell[1] + cell[2] : 0);
 const tot = (cell) => (cell ? cell[0] : 0);
 const rate = (success, total) => (total > 0 ? (success / total) * 100 : null);
 
@@ -51,7 +88,8 @@ const rate = (success, total) => (total > 0 ? (success / total) * 100 : null);
  *   'mean'             — baseline = simple average of the 3 monthly rates
  * minShipments — a customer needs at least this many shipments in EACH of the 4 months to be included (default 1).
  */
-export function evaluateMonth(clients, month, { method = 'pooled', minShipments = 1 } = {}) {
+export function evaluateMonth(clients, month, { method = 'pooled', minShipments = 1, metric = METRICS.delivery } = {}) {
+  const ok = metric.success;
   const prev = previousMonths(month);
   if (!prev) return { month, error: 'no-history', message: 'الشهر ده معندوش 3 شهور سابقة في نفس السنة.' };
   const needed = [...prev, month];
@@ -76,8 +114,8 @@ export function evaluateMonth(clients, month, { method = 'pooled', minShipments 
       name: c.n,
       monthlyRates: histRates, // aligned with `prev`
       baseline, current, delta,
-      level: levelFor(delta),
-      curTotal: tot(cur), curDelivered: cur[1], curPaid: cur[2],
+      level: levelFor(delta, metric.levels),
+      curTotal: tot(cur), curDelivered: cur[1], curPaid: cur[2], curSuccess: ok(cur),
       histTotal,
       _v: c.v,
     });
@@ -92,18 +130,19 @@ export function evaluateMonth(clients, month, { method = 'pooled', minShipments 
       : rate(sum(prev, ok), sum(prev, tot));
   const current = rows.length === 0 ? null : monthRate(month);
   const delta = baseline === null ? null : current - baseline;
-  const levelCounts = Object.fromEntries(LEVELS.map((l) => [l.key, 0]));
+  const levelCounts = Object.fromEntries(metric.levels.map((l) => [l.key, 0]));
   rows.forEach((r) => { levelCounts[r.level.key]++; });
 
   return {
-    month, prev, method, minShipments: min,
+    month, prev, method, minShipments: min, metric,
     group: {
-      baseline, current, delta, level: levelFor(delta),
+      baseline, current, delta, level: levelFor(delta, metric.levels),
       histMonthRates, // aligned with `prev`
       customers: rows.length,
       curTotal: rows.reduce((s, r) => s + r.curTotal, 0),
       curDelivered: rows.reduce((s, r) => s + r.curDelivered, 0),
       curPaid: rows.reduce((s, r) => s + r.curPaid, 0),
+      curSuccess: rows.reduce((s, r) => s + r.curSuccess, 0),
     },
     rows, excluded, levelCounts,
   };
@@ -131,7 +170,7 @@ export function evaluateAllMonths(clients, availableMonths, opts) {
  */
 export function evaluateBranches(clients, branches, evaluated) {
   if (!evaluated || evaluated.error || !branches) return [];
-  const { prev, month, method } = evaluated;
+  const { prev, month, method, metric } = evaluated;
   const included = new Set(evaluated.rows.map((r) => r.name));
   const acc = new Map(); // branch index -> { cells: {month:[total,ok]}, customers:Set }
   for (const c of clients) {
@@ -143,7 +182,7 @@ export function evaluateBranches(clients, branches, evaluated) {
         const cell = months[m];
         if (!cell) continue;
         const t = (a.cells[m] ||= [0, 0]);
-        t[0] += cell[0]; t[1] += cell[1] + cell[2];
+        t[0] += cell[0]; t[1] += metric.success(cell);
         if (m === month && cell[0] > 0) a.customers.add(c.n);
       }
     }
@@ -165,7 +204,7 @@ export function evaluateBranches(clients, branches, evaluated) {
     out.push({
       branch: branches[Number(bi)], customers: a.customers.size,
       histTotal, curTotal: cur[0], curSuccess: cur[1],
-      baseline, current, delta, level: levelFor(delta),
+      baseline, current, delta, level: levelFor(delta, metric.levels),
     });
   }
   return out;

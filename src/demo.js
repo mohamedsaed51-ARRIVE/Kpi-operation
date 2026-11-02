@@ -13,7 +13,8 @@ export function demoData() {
       const t = Math.max(5, Math.round(size * (0.8 + r() * 0.4)));
       const p = Math.min(0.98, base + (k === 3 ? lift : 0) + (r() - 0.5) * 0.04);
       const ok = Math.round(t * p), paid = Math.round(ok * 0.05);
-      v[m] = [t, ok - paid, paid];
+      const first = Math.round((ok - paid) * (0.45 + (k === 3 ? lift * 1.5 : 0) + (r() - 0.5) * 0.06));
+      v[m] = [t, ok - paid, paid, Math.max(0, Math.min(ok - paid, first))];
     });
     // split every month's counts across 1-3 branches (the parts add up exactly to the customer's totals)
     const b = {}; const myBranches = [Math.floor(r() * 6), Math.floor(r() * 6), Math.floor(r() * 6)].filter((x, k, a) => a.indexOf(x) === k);

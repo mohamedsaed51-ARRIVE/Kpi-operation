@@ -6,12 +6,12 @@ const d = (v) => `${v > 0 ? '+' : ''}${v.toFixed(2)}`;
 /** Plain-Arabic management summary built only from the calculated result (no assumptions beyond the stated rule). */
 export function managementSummary(result, { topN = 5 } = {}) {
   if (!result || result.error || result.group.baseline === null) return '';
-  const g = result.group, m = MONTH_AR[result.month];
+  const g = result.group, m = MONTH_AR[result.month], metric = result.metric;
   const prev = result.prev.map((x) => MONTH_AR[x]).join(' و');
   const lines = [];
-  lines.push(`ملخص جودة أداء العملاء — ${m}`);
+  lines.push(`ملخص ${metric.label} — ${m}`);
   lines.push(`• نطاق القياس: ${g.customers} عميل مكرر (لديهم شحنات في ${prev} و${m})، واستُبعد ${result.excluded.notInAllMonths} عميل لعدم توافر الأشهر الأربعة.`);
-  lines.push(`• نسبة النجاح (التسليم + رفض الاستلام مع دفع الشحن): ${p(g.current)} في ${m} مقابل متوسط ${p(g.baseline)} في ${prev}.`);
+  lines.push(`• نسبة النجاح (${metric.successDescription}): ${p(g.current)} في ${m} مقابل متوسط ${p(g.baseline)} في ${prev}.`);
   lines.push(`• الفرق: ${d(g.delta)}% ← التقييم: ${g.level.label}.`);
   const lc = result.levelCounts;
   lines.push(`• توزيع العملاء: ممتاز ${lc.excellent} · المطلوب ${lc.required} · مقبول ${lc.acceptable} · غير مقبول ${lc.below}.`);
