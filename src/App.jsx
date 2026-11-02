@@ -310,7 +310,7 @@ export default function App() {
           {result && !result.error && (
             <>
               <nav className="tabs" role="tablist">
-                {[['main', 'المؤشرات الرئيسية'], ['customers', 'العملاء'], ['analysis', 'التحليل والملخص']].map(([k, label]) => (
+                {[['main', 'المؤشرات الرئيسية'], ['details', 'التفاصيل والتحليل']].map(([k, label]) => (
                   <button key={k} role="tab" aria-selected={tab === k} className={`tab ${tab === k ? 'on' : ''}`} onClick={() => setTab(k)}>{label}</button>
                 ))}
               </nav>
@@ -332,14 +332,7 @@ export default function App() {
                 </section>
               )}
 
-              {tab === 'customers' && (
-              <section className="card">
-                  <h2>تفصيل العملاء — {MONTH_AR[result.month]}</h2>
-                  <CustomersTable result={result} />
-                </section>
-              )}
-
-              {tab === 'analysis' && (
+              {tab === 'details' && (
                 <>
               <section className="card">
                     <h2>ملخص للإدارة</h2>
@@ -360,12 +353,17 @@ export default function App() {
                     <h2>النتيجة شهر بشهر</h2>
                     <TrendTable rows={trend} selected={month} onSelect={setMonth} />
                   </section>
+
+              <section className="card">
+                    <h2>تفصيل العملاء — {MONTH_AR[result.month]}</h2>
+                    <CustomersTable result={result} />
+                  </section>
                 </>
               )}
             </>
           )}
 
-          {tab === 'analysis' && (
+          {tab === 'details' && (
           <details className="card">
             <summary>مراجعة تصنيف الحالات (للتأكد من أن «دفع الشحن» محسوب صح)</summary>
             <p className="muted">تُحسب «دفع شحن» فقط الحالات النهائية اللي نصها فيه: {(data.paidKeywords || []).join('، ')}. أي رفض تاني (زي رفض الدفع) لا يُحسب نجاح.</p>
