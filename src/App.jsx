@@ -180,6 +180,25 @@ function SummaryBox({ text }) {
   );
 }
 
+function KpiCards({ result }) {
+  return (
+<section className="kpis">
+                  <Kpi title="عدد العملاء" value={num(result.group.customers)}
+                    sub={`مستبعد: ${num(result.excluded.notInAllMonths)} (مش موجودين في الـ4 شهور)${result.excluded.belowMinimum ? ` + ${num(result.excluded.belowMinimum)} (أقل من الحد الأدنى)` : ''}`} />
+                  <Kpi title="متوسط التسليمات" value={pct(result.group.baseline)}
+                    sub={result.prev.map((m) => MONTH_AR[m]).join(' + ')} />
+                  <Kpi title={`متوسط التسليمات ${MONTH_AR[result.month]}`} value={pct(result.group.current)}
+                    sub={`${num(result.group.curDelivered)} تسليم + ${num(result.group.curPaid)} دفع شحن من ${num(result.group.curTotal)} شحنة`} />
+                  <Kpi title="الفرق" value={pp(result.group.delta)} sub="الفرق بين الشهرين بالنقاط المئوية" />
+                  <div className={`kpi verdict ${result.group.level ? `lv-${result.group.level.key}` : ''}`}>
+                    <div className="kpi-title">التقييم</div>
+                    <div className="kpi-value"><Badge level={result.group.level} /></div>
+                    <div className="kpi-sub">مقبول ≥ +3 · المطلوب ≥ +5 · ممتاز ≥ +7</div>
+                  </div>
+                </section>
+  );
+}
+
 function BranchesTable({ rows, result, hasData }) {
   const [q, setQ] = useState('');
   const [sort, setSort] = useState({ key: 'delta', dir: 'desc' });
@@ -188,7 +207,7 @@ function BranchesTable({ rows, result, hasData }) {
     const c = typeof A === 'string' ? A.localeCompare(B, 'ar') : A - B;
     return sort.dir === 'asc' ? c : -c;
   }), [rows, q, sort]);
-  if (!hasData) return <div className="alert warn">بيانات الفروع مش موجودة في رد السيرفر. اعمل Deploy جديد لـ <code>Code.gs</code> المحدّث (فيه <code>withBranches</code>) في Apps Script.</div>;
+  if (!hasData) return <div className="alert warn">بيانات الفروع مش موجودة في رد السيرفر. السيرفر لسه على نسخة قديمة من <code>Code.gs</code>. حدّث الكود (فيه <code>withBranches</code>) في Apps Script واعمل Deploy جديد على نفس الـ Deployment. للتأكد افتح الرابط <code>…/exec?action=clientMonthly&amp;withBranches=1</code> ولازم تلاقي <code>"branches"</code> في الرد.</div>;
   const th = (key, label) => (
     <th onClick={() => setSort((s) => ({ key, dir: s.key === key && s.dir === 'desc' ? 'asc' : 'desc' }))} className="sortable">
       {label}{sort.key === key ? (sort.dir === 'desc' ? ' ▼' : ' ▲') : ''}
@@ -310,30 +329,19 @@ export default function App() {
           {result && !result.error && (
             <>
               <nav className="tabs" role="tablist">
-                {[['main', 'المؤشرات الرئيسية'], ['details', 'التفاصيل والتحليل']].map(([k, label]) => (
+                {[['main', 'نسبة التسليم'], ['details', 'التفاصيل والتحليل']].map(([k, label]) => (
                   <button key={k} role="tab" aria-selected={tab === k} className={`tab ${tab === k ? 'on' : ''}`} onClick={() => setTab(k)}>{label}</button>
                 ))}
               </nav>
 
               {tab === 'main' && (
-              <section className="kpis">
-                  <Kpi title="عدد العملاء" value={num(result.group.customers)}
-                    sub={`مستبعد: ${num(result.excluded.notInAllMonths)} (مش موجودين في الـ4 شهور)${result.excluded.belowMinimum ? ` + ${num(result.excluded.belowMinimum)} (أقل من الحد الأدنى)` : ''}`} />
-                  <Kpi title="متوسط التسليمات" value={pct(result.group.baseline)}
-                    sub={result.prev.map((m) => MONTH_AR[m]).join(' + ')} />
-                  <Kpi title={`متوسط التسليمات ${MONTH_AR[result.month]}`} value={pct(result.group.current)}
-                    sub={`${num(result.group.curDelivered)} تسليم + ${num(result.group.curPaid)} دفع شحن من ${num(result.group.curTotal)} شحنة`} />
-                  <Kpi title="الفرق" value={pp(result.group.delta)} sub="الفرق بين الشهرين بالنقاط المئوية" />
-                  <div className={`kpi verdict ${result.group.level ? `lv-${result.group.level.key}` : ''}`}>
-                    <div className="kpi-title">التقييم</div>
-                    <div className="kpi-value"><Badge level={result.group.level} /></div>
-                    <div className="kpi-sub">مقبول ≥ +3 · المطلوب ≥ +5 · ممتاز ≥ +7</div>
-                  </div>
-                </section>
+              <KpiCards result={result} />
               )}
 
               {tab === 'details' && (
                 <>
+                  <KpiCards result={result} />
+
               <section className="card">
                     <h2>ملخص للإدارة</h2>
                     <SummaryBox text={managementSummary(result)} />
