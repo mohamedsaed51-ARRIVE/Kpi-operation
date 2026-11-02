@@ -61,3 +61,4 @@ code { background: #EEF2F7; padding: 1px 5px; border-radius: 4px; font-size: 12p
 .tab.on { color: var(--blue); border-bottom-color: var(--blue); }
 tfoot td { font-weight: 700; background: #F8FAFC; }
 @media print { .tabs { display: none !important; } }
+.sub-h { margin: 22px 0 10px; font-size: 16px; }

@@ -310,7 +310,7 @@ export default function App() {
           {result && !result.error && (
             <>
               <nav className="tabs" role="tablist">
-                {[['main', 'المؤشرات الرئيسية'], ['branches', 'الفروع'], ['customers', 'العملاء'], ['analysis', 'التحليل والملخص']].map(([k, label]) => (
+                {[['main', 'المؤشرات الرئيسية'], ['customers', 'العملاء'], ['analysis', 'التحليل والملخص']].map(([k, label]) => (
                   <button key={k} role="tab" aria-selected={tab === k} className={`tab ${tab === k ? 'on' : ''}`} onClick={() => setTab(k)}>{label}</button>
                 ))}
               </nav>
@@ -329,13 +329,6 @@ export default function App() {
                     <div className="kpi-value"><Badge level={result.group.level} /></div>
                     <div className="kpi-sub">مقبول ≥ +3 · المطلوب ≥ +5 · ممتاز ≥ +7</div>
                   </div>
-                </section>
-              )}
-
-              {tab === 'branches' && (
-                <section className="card">
-                  <h2>الفروع — {MONTH_AR[result.month]}</h2>
-                  <BranchesTable rows={branchRows} result={result} hasData={hasBranches} />
                 </section>
               )}
 
@@ -359,6 +352,8 @@ export default function App() {
                     <div className="levels">
                       {LEVELS.map((l) => <span key={l.key} className="lvl-chip"><Badge level={l} /> {num(result.levelCounts[l.key])} عميل</span>)}
                     </div>
+                    <h3 className="sub-h">الفروع — {MONTH_AR[result.month]}</h3>
+                    <BranchesTable rows={branchRows} result={result} hasData={hasBranches} />
                   </section>
 
               <section className="card">
