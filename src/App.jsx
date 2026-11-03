@@ -7,10 +7,10 @@ import { BASELINE_MONTH, METRICS, MONTH_AR, evaluateAllMonths, evaluateBranches,
 import {
   Badge, BaselineChart, BranchesTable, CustomersTable, KpiCards, SummaryBox, TrendTable, num,
 } from './components.jsx';
-import { BranchesPage, DataQualityPage, MonthSnapshotView, SettingsPage, SlaOverviewCards, SlaSnapshotView } from './pages.jsx';
+import { BranchesPage, DataQualityPage, MonthSnapshotCards, MonthSnapshotView, SettingsPage, SlaOverviewCards, SlaSnapshotCards, SlaSnapshotView } from './pages.jsx';
 import { SLA } from './lib/sla.js';
 import { levelsFor, withLevels } from './lib/levels.js';
-import ReturnsSlaPage from './ReturnsSlaPage.jsx';
+import ReturnsSlaPage, { ReturnsOverviewCards } from './ReturnsSlaPage.jsx';
 import { returnsSlaLimit } from './lib/returnsSla.js';
 
 const Icon = ({ d }) => (
@@ -242,7 +242,7 @@ export default function App() {
                     <h2>{sectionLabel(x)}</h2>
                     <button className="link" onClick={() => setSection(x.id)}>عرض التفاصيل ←</button>
                   </div>
-                  {r.result ? <KpiCards result={r.result} /> : !r.available ? <NeedsUpdate /> : <div className="alert warn">الأساس شهر {MONTH_AR[METRICS[x.metric].baseMonth || BASELINE_MONTH]} — اختر شهرًا مقاسًا بعده.</div>}
+                  {r.result ? <KpiCards result={r.result} /> : !r.available ? <NeedsUpdate /> : <><div className="alert warn">الأساس شهر {MONTH_AR[METRICS[x.metric].baseMonth || BASELINE_MONTH]} — مفيش شهر بعده للمقارنة لسه، فبتظهر أرقام {MONTH_AR[BASELINE_MONTH]} وحدها.</div><MonthSnapshotCards snap={faSnap} metric={firstMetric} /></>}
                 </section>
               );
             })}
@@ -253,7 +253,19 @@ export default function App() {
                   <h2>Branch SLA</h2>
                   <button className="link" onClick={() => setSection('branches')}>عرض التفاصيل ←</button>
                 </div>
-                <SlaOverviewCards data={data} delivery={slaDelivery} levels={slaLevels} />
+                {slaDelivery.result
+                  ? <SlaOverviewCards data={data} delivery={slaDelivery} levels={slaLevels} />
+                  : <><div className="alert warn">الأساس شهر {MONTH_AR[BASELINE_MONTH]} — مفيش شهر بعده للمقارنة لسه، فبتظهر أرقام {MONTH_AR[BASELINE_MONTH]} وحدها.</div><SlaSnapshotCards snap={slaSnap} /></>}
+              </section>
+            )}
+
+            {current.kind === 'overview' && (
+              <section className="group">
+                <div className="group-head">
+                  <h2>SLA المرتجعات</h2>
+                  <button className="link" onClick={() => setSection('returnsSla')}>عرض التفاصيل ←</button>
+                </div>
+                <ReturnsOverviewCards limit={returnsSlaLimit(targets)} levels={returnsLevels} demo={demo} />
               </section>
             )}
 

@@ -274,6 +274,30 @@ function SnapTable({ title, cols, rows, defaultSort }) {
   );
 }
 
+/** Cards of the baseline month alone (also used in «المؤشرات الرئيسية» while no later month can be compared). */
+export function MonthSnapshotCards({ snap, metric }) {
+  if (!snap || !snap.customers) return <div className="alert warn">مفيش شحنات لشهر {MONTH_AR[snap?.month]} في البيانات.</div>;
+  return (
+    <section className="kpis">
+      <Kpi title="عدد العملاء" value={num(snap.customers)} />
+      <Kpi title="إجمالي الشحنات" value={num(snap.total)} />
+      <Kpi title={metric.successDescription} value={num(snap.success)} />
+      <Kpi title={`${metric.label} ${MONTH_AR[snap.month]}`} value={pc1(snap.rate)} tone="brand" />
+    </section>
+  );
+}
+export function SlaSnapshotCards({ snap }) {
+  if (!snap || !snap.delivered) return <div className="alert warn">مفيش شحنات مسلّمة لشهر {MONTH_AR[snap?.month]} في البيانات.</div>;
+  return (
+    <section className="kpis">
+      <Kpi title="عدد الفروع" value={num(snap.rows.length)} />
+      <Kpi title="عدد العملاء" value={num(snap.customers)} />
+      <Kpi title="الشحنات المسلّمة" value={num(snap.delivered)} />
+      <Kpi title={`${SLA.avgLabel} ${MONTH_AR[snap.month]}`} value={`${d2(snap.avg)} يوم`} tone="brand" />
+    </section>
+  );
+}
+
 /** First Attempt (or any % KPI): what happened in the baseline month, without any comparison. */
 export function MonthSnapshotView({ snap, metric }) {
   if (!snap || !snap.customers) return <div className="alert warn">مفيش شحنات لشهر {MONTH_AR[snap?.month]} في البيانات.</div>;
@@ -281,12 +305,7 @@ export function MonthSnapshotView({ snap, metric }) {
     <section className="card">
       <h2>اللي حصل في {MONTH_AR[snap.month]} (شهر الأساس)</h2>
       <p className="muted">أرقام {MONTH_AR[snap.month]} وحدها بدون مقارنة، لنفس عملاء نسبة التسليم. بتتحول لمقارنة أول ما يبقى فيه شهر بعده.</p>
-      <section className="kpis">
-        <Kpi title="عدد العملاء" value={num(snap.customers)} />
-        <Kpi title="إجمالي الشحنات" value={num(snap.total)} />
-        <Kpi title={metric.successDescription} value={num(snap.success)} />
-        <Kpi title={`${metric.label} ${MONTH_AR[snap.month]}`} value={pc1(snap.rate)} tone="brand" />
-      </section>
+      <MonthSnapshotCards snap={snap} metric={metric} />
       <SnapTable title="الفروع" defaultSort={{ key: 'total', dir: 'desc' }} rows={snap.branchRows}
         cols={[{ k: 'branch', label: 'الفرع' }, { k: 'customers', label: 'عدد العملاء', f: SIMPLE_NUM }, { k: 'total', label: 'الشحنات', f: SIMPLE_NUM }, { k: 'success', label: metric.successDescription, f: SIMPLE_NUM }, { k: 'rate', label: 'النسبة', f: pc1 }]} />
       <SnapTable title="العملاء" defaultSort={{ key: 'total', dir: 'desc' }} rows={snap.rows}
@@ -302,12 +321,7 @@ export function SlaSnapshotView({ snap }) {
     <section className="card">
       <h2>Branch SLA — اللي حصل في {MONTH_AR[snap.month]} (شهر الأساس)</h2>
       <p className="muted">متوسط مدة التسليم في {MONTH_AR[snap.month]} وحده بدون مقارنة، لنفس عملاء نسبة التسليم.</p>
-      <section className="kpis">
-        <Kpi title="عدد الفروع" value={num(snap.rows.length)} />
-        <Kpi title="عدد العملاء" value={num(snap.customers)} />
-        <Kpi title="الشحنات المسلّمة" value={num(snap.delivered)} />
-        <Kpi title={`${SLA.avgLabel} ${MONTH_AR[snap.month]}`} value={`${d2(snap.avg)} يوم`} tone="brand" />
-      </section>
+      <SlaSnapshotCards snap={snap} />
       <SnapTable title="الفروع" defaultSort={{ key: 'avg', dir: 'desc' }} rows={snap.rows}
         cols={[{ k: 'branch', label: 'الفرع' }, { k: 'customers', label: 'عدد العملاء', f: SIMPLE_NUM }, { k: 'delivered', label: 'الشحنات المسلّمة', f: SIMPLE_NUM }, { k: 'avg', label: `${SLA.avgLabel} (يوم)`, f: d2 }]} />
     </section>

@@ -88,6 +88,66 @@ const cmp = (a, b, k, d) => {
 
 let CACHE = null; // decoded rows survive tab switches; the «تحديث» button reloads
 
+/** Loads (live sheet → static snapshot fallback) and caches the decoded rows. Shared by the tab and by «المؤشرات الرئيسية». */
+async function fetchAndCache(demo) {
+  let j, source = 'live', warn = '';
+  if (demo) { j = demoReturns(); source = 'demo'; }
+  else {
+    try { j = await fetchReturnsLive(); }
+    catch (e) {
+      const snap = await fetchReturnsSnapshot();
+      if (!snap) throw e;
+      j = snap; source = 'snap';
+      warn = `تعذّر الاتصال بالشيت المباشر: ${e.message} — معروضة لقطة ثابتة.`;
+    }
+  }
+  const decoded = decodeReturns(j), meta = { source, updatedAt: j.updatedAt };
+  CACHE = { demo: !!demo, rows: decoded, meta, error: warn };
+  return CACHE;
+}
+
+/** Cards for «المؤشرات الرئيسية»: the comparison of the latest comparable month, or the basic figures while there are not 3 previous months yet. */
+export function ReturnsOverviewCards({ limit, levels, demo }) {
+  const [state, setState] = useState(CACHE && CACHE.demo === !!demo ? CACHE : null);
+  const [error, setError] = useState('');
+  useEffect(() => { if (!state) fetchAndCache(demo).then(setState).catch((e) => setError(e.message || String(e))); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const rows = state?.rows;
+  const age = useMemo(() => (r) => ageOf(r, 'written'), []);
+  const months = useMemo(() => (rows ? comparableMonths(rows, age) : null), [rows, age]);
+  const month = months?.comparable[months.comparable.length - 1];
+  const ev = useMemo(() => (rows && month ? evaluateReturnsMonth(rows, month, age, levels, levelFor) : null), [rows, month, age, levels]);
+  const T = useMemo(() => (rows ? stats(rows, age, limit) : null), [rows, age, limit]);
+  if (error) return <div className="alert err"><b>تعذر تحميل بيانات SLA المرتجعات.</b> {error}</div>;
+  if (!rows) return <div className="alert">جاري تحميل بيانات SLA المرتجعات…</div>;
+  if (ev?.group) {
+    const g = ev.group;
+    return (
+      <section className="kpis">
+        <Kpi title="متوسط عمر المرتجع — آخر 3 شهور" value={`${f1(g.baseline)} يوم`} sub={ev.prev.map(monthLabel).join(' + ')} />
+        <Kpi title={`متوسط عمر المرتجع — ${monthLabel(ev.month)}`} value={`${f1(g.current)} يوم`} tone="brand" sub={`${fmt(g.nCur)} مرتجع`} />
+        <Kpi title="التحسن" value={`${g.improvement > 0 ? '+' : ''}${g.improvement.toFixed(3)} يوم`} tone={g.improvement >= 0 ? 'good' : 'bad'} sub="الموجب = أسرع من متوسط الـ3 شهور" />
+        <div className={`kpi verdict ${g.level ? `lv-${g.level.key}` : ''}`}>
+          <div className="kpi-title">التقييم</div>
+          <div className="kpi-value"><Badge level={g.level} /></div>
+          <div className="kpi-sub">{levels.slice(0, 3).reverse().map((l) => `${l.label} ≥ ${l.minDelta}`).join(' · ')} يوم أسرع</div>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <>
+      <div className="alert warn">
+        مفيش شهر معاه 3 شهور سابقة في شيت Sla RTO (المتاح: {months.present.length ? months.present.map(monthLabel).join('، ') : 'لا يوجد'})، فبتظهر أرقام الشيت الحالية من غير مقارنة.
+      </div>
+      <section className="kpis">
+        <Kpi title="عدد المرتجعات" value={fmt(T.rows)} sub={`${fmt(new Set(rows.map((r) => r.wb)).size)} بوليصة مميزة`} />
+        <Kpi title="متوسط عمر المرتجع (يوم)" value={f1(T.avg)} tone="brand" sub={`الوسيط ${f1(T.med)} · الأقصى ${fmt(T.max)}`} />
+        <Kpi title="داخل حد الـ SLA" value={limit == null ? '—' : pctOf(T.rate)} tone={limit == null ? '' : 'good'} sub={limit == null ? 'حدّد حد الـ SLA من الإعدادات' : `${fmt(T.within)} من ${fmt(T.n)}`} />
+      </section>
+    </>
+  );
+}
+
 export default function ReturnsSlaPage({ limit, demo, levels }) {
   const [rows, setRows] = useState(CACHE?.rows || null);
   const [meta, setMeta] = useState(CACHE?.meta || { source: '', updatedAt: null });
@@ -105,20 +165,8 @@ export default function ReturnsSlaPage({ limit, demo, levels }) {
   const load = async () => {
     setLoading(true); setError('');
     try {
-      let j, source = 'live';
-      if (demo) { j = demoReturns(); source = 'demo'; }
-      else {
-        try { j = await fetchReturnsLive(); }
-        catch (e) {
-          const snap = await fetchReturnsSnapshot();
-          if (!snap) throw e;
-          j = snap; source = 'snap';
-          setError(`تعذّر الاتصال بالشيت المباشر: ${e.message} — معروضة لقطة ثابتة.`);
-        }
-      }
-      const decoded = decodeReturns(j), m = { source, updatedAt: j.updatedAt };
-      CACHE = { demo: !!demo, rows: decoded, meta: m, error: source === 'snap' ? 'لقطة ثابتة (تعذّر الاتصال المباشر)' : '' };
-      setRows(decoded); setMeta(m);
+      const c = await fetchAndCache(demo);
+      setRows(c.rows); setMeta(c.meta); setError(c.error);
     } catch (e) { setError(e.message || String(e)); }
     finally { setLoading(false); }
   };
