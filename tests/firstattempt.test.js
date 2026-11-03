@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { METRICS, evaluateMonth, evaluateBranches, levelFor } from '../src/lib/quality.js';
 
-const FA = METRICS.firstAttempt;
+// these tests check the success definition and levels with the generic 3-month engine; the October-baseline methodology is in baseline.test.js
+const FA = { ...METRICS.firstAttempt, baseMonth: null };
 // cell = [total, delivered, paid, deliveredFirstAttempt]
 const clients = [
   // 3 prior months: 100 shipments each, 40 first-attempt -> 40% ; October: 100 shipments, 50 first attempt -> 50% ; delta +10 -> excellent

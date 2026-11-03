@@ -3,7 +3,7 @@ import { fetchClientMonthly, fetchTargets, saveTargets } from './api.js';
 import { API_URL } from './config.js';
 import { demoData, demoTargets } from './demo.js';
 import { managementSummary } from './lib/summary.js';
-import { METRICS, MONTH_AR, evaluateAllMonths, evaluateBranches, evaluateMonth } from './lib/quality.js';
+import { BASELINE_MONTH, METRICS, MONTH_AR, evaluateAllMonths, evaluateBranches, evaluateMonth } from './lib/quality.js';
 import {
   Badge, BaselineChart, BranchesTable, CustomersTable, KpiCards, SummaryBox, TrendTable, num,
 } from './components.jsx';
@@ -18,6 +18,7 @@ const Icon = ({ d }) => (
 );
 // To add a KPI: add a METRICS entry in src/lib/quality.js and a section here with kind: 'metric' —
 // it appears in the sidebar, in «المؤشرات الرئيسية» and gets its own page.
+const MONTH_ORDER_IDX = (m) => ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].indexOf(m);
 const SECTIONS = [
   { id: 'overview', kind: 'overview', group: 'المؤشرات', label: 'المؤشرات الرئيسية', icon: 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z', sub: 'ملخص مؤشرات الأداء الرئيسية' },
   { id: 'delivery', kind: 'metric', metric: 'delivery', group: 'المؤشرات', icon: 'M3 7h11v9H3zM14 10h4l3 3v3h-7zM7 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM17 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3z' },
@@ -32,9 +33,18 @@ const sectionSub = (x) => (x.metric ? METRICS[x.metric].description : x.sub);
 const GROUPS = [...new Set(SECTIONS.map((x) => x.group))];
 
 /** Everything computed for one KPI (metric) so every KPI page uses the same engine. */
-function useMetricResults(data, metric, month, opts, hasBranches) {
+function useMetricResults(data, metric, month, opts, hasBranches, eligibleMetric) {
   const available = !!data && metric.available(data.clients);
-  const o = useMemo(() => ({ ...opts, metric }), [opts.method, opts.minShipments, metric]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A metric with a single baseline month (First Attempt) measures the SAME customers as «نسبة التسليم» (eligibleMetric).
+  const eligibleFor = useMemo(() => {
+    if (!data || !metric.baseMonth || !eligibleMetric) return null;
+    const cache = new Map();
+    return (m) => {
+      if (!cache.has(m)) { const r = evaluateMonth(data.clients, m, { ...opts, metric: eligibleMetric }); cache.set(m, new Set(r.error ? [] : r.rows.map((x) => x.name))); }
+      return cache.get(m);
+    };
+  }, [data, metric.baseMonth, eligibleMetric, opts.method, opts.minShipments]); // eslint-disable-line react-hooks/exhaustive-deps
+  const o = useMemo(() => ({ ...opts, metric, eligibleFor }), [opts.method, opts.minShipments, metric, eligibleFor]); // eslint-disable-line react-hooks/exhaustive-deps
   const trend = useMemo(() => (available ? evaluateAllMonths(data.clients, data.months, o) : []), [data, available, o]);
   const result = useMemo(() => (available && month ? evaluateMonth(data.clients, month, o) : null), [data, available, month, o]);
   const branchRows = useMemo(() => (result && !result.error && hasBranches ? evaluateBranches(data.clients, data.branches, result) : []), [data, result, hasBranches]);
@@ -54,7 +64,7 @@ function MetricPage({ m, month, setMonth, hasBranches, targets }) {
       </section>
 
       <section className="card">
-        <h2>{metric.avgLabel}: الأشهر السابقة مقابل الشهر المقاس</h2>
+        <h2>{metric.avgLabel}: {metric.baseMonth ? `شهر الأساس (${MONTH_AR[metric.baseMonth]})` : 'الأشهر السابقة'} مقابل الشهر المقاس</h2>
         <BaselineChart result={result} />
         <div className="levels">
           {metric.levels.map((l) => <span key={l.key} className="lvl-chip"><Badge level={l} /> {num(result.levelCounts[l.key])} عميل</span>)}
@@ -79,7 +89,7 @@ function MetricPage({ m, month, setMonth, hasBranches, targets }) {
           <p className="muted">
             شحنة «تسليم من أول محاولة» = شحنة حالتها «تسليم ناجح» وتصنيف محاولتها «محاولة أولى» بنفس قاعدة الداش التشغيلية
             (الفرق بين تاريخ الاستلام وتاريخ آخر حالة لا يزيد عن الحد المضبوط للمحاولة الأولى، الافتراضي يوم واحد).
-            الرفض (بنوعيه) والمرتجع وقيد التشغيل لا يُحسبون نجاحًا. نسبة العميل = التسليم من أول محاولة ÷ إجمالي شحناته في الشهر.
+            الرفض (بنوعيه) والمرتجع وقيد التشغيل لا يُحسبون نجاحًا. نسبة العميل = التسليم من أول محاولة ÷ إجمالي شحناته في الشهر. العملاء = نفس عملاء نسبة التسليم، والأساس = شهر أكتوبر فقط (مش متوسط 3 شهور).
           </p>
         </details>
       )}
@@ -131,8 +141,14 @@ export default function App() {
   const firstMetric = useMemo(() => withLevels(METRICS.firstAttempt, targets), [fLevels]); // eslint-disable-line react-hooks/exhaustive-deps
   const results = {
     delivery: useMetricResults(data, deliveryMetric, month, opts, hasBranches),
-    firstAttempt: useMetricResults(data, firstMetric, month, opts, hasBranches),
+    firstAttempt: useMetricResults(data, firstMetric, month, opts, hasBranches, deliveryMetric),
   };
+  // Branch SLA: same customers as «نسبة التسليم», baseline = the single baseline month (October).
+  const slaDelivery = useMemo(() => {
+    const r = results.delivery.result;
+    const ok = r && MONTH_ORDER_IDX(r.month) > MONTH_ORDER_IDX(BASELINE_MONTH);
+    return { result: ok ? { ...r, prev: [BASELINE_MONTH], method: 'pooled' } : null };
+  }, [results.delivery.result]); // eslint-disable-line react-hooks/exhaustive-deps
   const months = results.delivery.trend; // same eligible months for every KPI
   useEffect(() => {
     if (data && months.length && !months.some((t) => t.month === month)) setMonth(months[months.length - 1].month);
@@ -217,7 +233,7 @@ export default function App() {
                     <h2>{sectionLabel(x)}</h2>
                     <button className="link" onClick={() => setSection(x.id)}>عرض التفاصيل ←</button>
                   </div>
-                  {r.result ? <KpiCards result={r.result} /> : !r.available ? <NeedsUpdate /> : null}
+                  {r.result ? <KpiCards result={r.result} /> : !r.available ? <NeedsUpdate /> : <div className="alert warn">الأساس شهر {MONTH_AR[METRICS[x.metric].baseMonth || BASELINE_MONTH]} — اختر شهرًا مقاسًا بعده.</div>}
                 </section>
               );
             })}
@@ -228,15 +244,15 @@ export default function App() {
                   <h2>Branch SLA</h2>
                   <button className="link" onClick={() => setSection('branches')}>عرض التفاصيل ←</button>
                 </div>
-                <SlaOverviewCards data={data} delivery={results.delivery} levels={slaLevels} />
+                <SlaOverviewCards data={data} delivery={slaDelivery} levels={slaLevels} />
               </section>
             )}
 
-            {current.kind === 'metric' && cur && (!cur.available ? <NeedsUpdate /> : cur.result && (
+            {current.kind === 'metric' && cur && (!cur.available ? <NeedsUpdate /> : !cur.result ? <div className="alert warn">الأساس لهذا المؤشر شهر {MONTH_AR[METRICS[current.metric].baseMonth || BASELINE_MONTH]}، فاختر شهرًا مقاسًا بعده (ولنفس عملاء نسبة التسليم لازم يكون ليه 3 شهور سابقة).</div> : (
               <MetricPage key={current.id} m={cur} month={month} setMonth={setMonth} hasBranches={hasBranches} targets={targets} />
             ))}
 
-            {current.kind === 'branches' && months.length > 0 && <BranchesPage data={data} delivery={results.delivery} targets={targets} levels={slaLevels} />}
+            {current.kind === 'branches' && months.length > 0 && <BranchesPage data={data} delivery={slaDelivery} targets={targets} levels={slaLevels} />}
 
             {current.kind === 'quality' && <DataQualityPage data={data} />}
 

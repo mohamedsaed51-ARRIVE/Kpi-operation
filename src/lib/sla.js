@@ -1,14 +1,14 @@
 import { makeLevels, levelFor } from './quality.js';
 
 // SLA التسليم = average delivery days (lower is better). Same customers methodology as the other KPIs:
-// customers present in the 3 previous months + the measured month; baseline = average of the 3 previous months.
+// Same customers as «نسبة التسليم»; baseline = the single baseline month (October), not the 3-month average.
 // Improvement (days) = baseline − current  →  ≥ 0.1 مقبول · ≥ 0.2 المطلوب · ≥ 0.3 ممتاز
 export const SLA = {
   id: 'sla',
   label: 'SLA التسليم',
   avgLabel: 'متوسط مدة التسليم',
   unit: 'يوم',
-  description: 'متوسط مدة التسليم بالأيام لكل فرع مقارنة بمتوسط آخر 3 شهور لنفس العملاء — النقص تحسّن',
+  description: 'متوسط مدة التسليم بالأيام لكل فرع لنفس عملاء نسبة التسليم، مقارنة بشهر أكتوبر (الأساس) — النقص تحسّن',
   levels: makeLevels({ acceptable: 0.1, required: 0.2, excellent: 0.3 }),
   // cell = [total, delivered, paid, firstAttempt, sumDays, deliveredWithDate]
   available: (clients) => clients.some((c) => Object.values(c.v).some((cell) => cell.length > 5)),

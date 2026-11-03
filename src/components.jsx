@@ -183,8 +183,8 @@ export function KpiCards({ result }) {
   return (
     <section className="kpis">
       <Kpi title="عدد العملاء" value={num(g.customers)}
-        sub={`مستبعد: ${num(result.excluded.notInAllMonths)} (مش موجودين في الـ4 شهور)${result.excluded.belowMinimum ? ` + ${num(result.excluded.belowMinimum)} (أقل من الحد الأدنى)` : ''}`} />
-      <Kpi title={metric.avgLabel} value={pct(g.baseline)} sub={result.prev.map((m) => MONTH_AR[m]).join(' + ')} />
+        sub={metric.baseMonth ? `نفس عملاء نسبة التسليم — مستبعد: ${num(result.excluded.notInAllMonths)} (مش في ${MONTH_AR[metric.baseMonth]} أو الشهر المقاس)${result.excluded.belowMinimum ? ` + ${num(result.excluded.belowMinimum)} (أقل من الحد الأدنى)` : ''}` : `مستبعد: ${num(result.excluded.notInAllMonths)} (مش موجودين في الـ4 شهور)${result.excluded.belowMinimum ? ` + ${num(result.excluded.belowMinimum)} (أقل من الحد الأدنى)` : ''}`} />
+      <Kpi title={metric.baseMonth ? `${metric.avgLabel} — الأساس` : metric.avgLabel} value={pct(g.baseline)} sub={result.prev.map((m) => MONTH_AR[m]).join(' + ')} />
       <Kpi title={`${metric.avgLabel} ${MONTH_AR[result.month]}`} value={pct(g.current)} tone="brand" sub={metric.successText(g)} />
       <Kpi title="الفرق" value={pp(g.delta)} tone={deltaTone} sub="الفرق بين الشهرين بالنقاط المئوية" />
       <div className={`kpi verdict ${g.level ? `lv-${g.level.key}` : ''}`}>

@@ -20,6 +20,8 @@ export const MONTH_AR = {
 };
 
 export const HISTORY_MONTHS = 3;
+// First Attempt and Branch SLA: same customers as «نسبة التسليم», but the baseline is this single month (not the 3-month average).
+export const BASELINE_MONTH = 'October';
 
 export function makeLevels({ excellent, required, acceptable }) {
   return [
@@ -47,8 +49,9 @@ export const METRICS = {
   firstAttempt: {
     id: 'firstAttempt',
     label: 'First Attempt',
-    avgLabel: 'متوسط First Attempt',
-    description: 'متوسط التسليم من أول محاولة (بدون أي رفض) مقارنة بمتوسط آخر 3 شهور للعملاء المكررين',
+    avgLabel: 'نسبة First Attempt',
+    description: 'التسليم من أول محاولة (بدون أي رفض) لنفس عملاء نسبة التسليم، مقارنة بشهر أكتوبر (الأساس)',
+    baseMonth: BASELINE_MONTH, // single baseline month instead of the 3 previous months
     successDescription: 'التسليم من أول محاولة',
     levels: makeLevels({ acceptable: 3, required: 6, excellent: 10 }),
     success: (c) => (c ? c[3] || 0 : 0),
@@ -88,16 +91,23 @@ const rate = (success, total) => (total > 0 ? (success / total) * 100 : null);
  *   'mean'             — baseline = simple average of the 3 monthly rates
  * minShipments — a customer needs at least this many shipments in EACH of the 4 months to be included (default 1).
  */
-export function evaluateMonth(clients, month, { method = 'pooled', minShipments = 1, metric = METRICS.delivery } = {}) {
+export function evaluateMonth(clients, month, { method = 'pooled', minShipments = 1, metric = METRICS.delivery, eligibleFor = null } = {}) {
   const ok = metric.success;
-  const prev = previousMonths(month);
+  // metric.baseMonth → baseline = that single month, and only the customers returned by eligibleFor(month) are measured.
+  const base = metric.baseMonth || null;
+  if (base && MONTH_ORDER.indexOf(month) <= MONTH_ORDER.indexOf(base)) {
+    return { month, error: 'before-base', message: `الأساس شهر ${MONTH_AR[base]} — اختر شهرًا بعده.` };
+  }
+  const prev = base ? [base] : previousMonths(month);
   if (!prev) return { month, error: 'no-history', message: 'الشهر ده معندوش 3 شهور سابقة في نفس السنة.' };
+  const only = base && eligibleFor ? eligibleFor(month) : null;
   const needed = [...prev, month];
   const min = Math.max(1, Number(minShipments) || 1);
 
   const rows = [];
   const excluded = { notInAllMonths: 0, belowMinimum: 0 };
   for (const c of clients) {
+    if (only && !only.has(c.n)) continue;
     const cells = needed.map((m) => c.v[m]);
     const present = cells.every((cell) => tot(cell) > 0);
     if (!present) { if (cells.some((cell) => tot(cell) > 0)) excluded.notInAllMonths++; continue; }
@@ -152,8 +162,9 @@ export function evaluateMonth(clients, month, { method = 'pooled', minShipments 
 export function evaluateAllMonths(clients, availableMonths, opts) {
   const have = new Set(availableMonths);
   const out = [];
+  const base = opts?.metric?.baseMonth || null;
   for (const m of MONTH_ORDER) {
-    const prev = previousMonths(m);
+    const prev = base ? (MONTH_ORDER.indexOf(m) > MONTH_ORDER.indexOf(base) ? [base] : null) : previousMonths(m);
     if (!prev || !have.has(m) || !prev.every((p) => have.has(p))) continue;
     const r = evaluateMonth(clients, m, opts);
     if (!r.error) out.push({ month: m, ...r.group, excluded: r.excluded });

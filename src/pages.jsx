@@ -157,8 +157,8 @@ export function SettingsPage({ branches, targets, onSave, unavailableReason }) {
     <section className="card">
       <h2>مقاييس التقييم</h2>
       <p className="muted">
-        الحد الأدنى للتحسن عشان المؤشر يتقيّم «مقبول» أو «المطلوب» أو «ممتاز». نسبة التسليم وFirst Attempt: زيادة بالنقاط المئوية عن متوسط آخر 3 شهور.
-        Branch SLA: نقص في متوسط مدة التسليم بالأيام (الأسرع أحسن). الخانة الفاضية = القيمة الافتراضية. لازم مقبول ≤ المطلوب ≤ ممتاز.
+        الحد الأدنى للتحسن عشان المؤشر يتقيّم «مقبول» أو «المطلوب» أو «ممتاز». نسبة التسليم: زيادة بالنقاط المئوية عن متوسط آخر 3 شهور. First Attempt: زيادة بالنقاط المئوية عن شهر أكتوبر.
+        Branch SLA: نقص في متوسط مدة التسليم بالأيام عن أكتوبر (الأسرع أحسن). الخانة الفاضية = القيمة الافتراضية. لازم مقبول ≤ المطلوب ≤ ممتاز.
       </p>
       <div className="table-wrap">
         <table>
@@ -267,7 +267,7 @@ function SlaCards({ rows, group, ev, levels }) {
       <Kpi title="عدد الفروع" value={num(rows.length)} sub={`${num(group.customers)} عميل محسوب (نفس عملاء باقي المؤشرات)`} />
       <Kpi title={SLA.avgLabel} value={`${d2(group.baseline)} يوم`} sub={ev.prev.map((m) => MONTH_AR[m]).join(' + ')} />
       <Kpi title={`${SLA.avgLabel} ${MONTH_AR[ev.month]}`} value={`${d2(group.current)} يوم`} tone="brand" sub={`${num(group.delivered)} شحنة مسلّمة`} />
-      <Kpi title="التحسن" value={`${imp(group.improvement)} يوم`} tone={group.improvement >= 0 ? 'good' : 'bad'} sub="الموجب = أسرع من متوسط الأشهر السابقة" />
+      <Kpi title="التحسن" value={`${imp(group.improvement)} يوم`} tone={group.improvement >= 0 ? 'good' : 'bad'} sub="الموجب = أسرع من شهر الأساس (أكتوبر)" />
       <div className={`kpi verdict ${group.level ? `lv-${group.level.key}` : ''}`}>
         <div className="kpi-title">التقييم</div>
         <div className="kpi-value"><Badge level={group.level} /></div>
@@ -286,7 +286,7 @@ export function SlaOverviewCards({ data, delivery, levels }) {
     [data, available, ev, levels],
   );
   if (!available) return <div className="alert warn">بيانات SLA التسليم مش موجودة في رد السيرفر. اتأكد إن الباك إند المنشور هو آخر نسخة.</div>;
-  if (!ev || !group) return <div className="alert warn">مفيش بيانات كفاية لحساب SLA الفروع في الشهر المختار.</div>;
+  if (!ev || !group) return <div className="alert warn">مفيش بيانات كفاية لحساب SLA الفروع في الشهر المختار. الأساس شهر أكتوبر، فاختر شهرًا بعده (ولازم يكون ليه 3 شهور سابقة).</div>;
   return <SlaCards rows={rows} group={group} ev={ev} levels={levels} />;
 }
 
@@ -306,7 +306,7 @@ export function BranchesPage({ data, delivery, targets, levels }) {
     return sort.dir === 'asc' ? c : -c;
   }), [rows, q, lv, sort]);
   if (!available) return <div className="alert warn">بيانات SLA التسليم مش موجودة في رد السيرفر. اتأكد إن الباك إند المنشور هو آخر نسخة من <code>backend/Code.gs</code>.</div>;
-  if (!ev || !group) return <div className="alert warn">مفيش بيانات كفاية لحساب SLA الفروع في الشهر المختار.</div>;
+  if (!ev || !group) return <div className="alert warn">مفيش بيانات كفاية لحساب SLA الفروع في الشهر المختار. الأساس شهر أكتوبر، فاختر شهرًا بعده (ولازم يكون ليه 3 شهور سابقة).</div>;
   const counts = Object.fromEntries(levels.map((l) => [l.key, rows.filter((r) => r.level.key === l.key).length]));
   const th = (key, label) => (
     <th className="sortable" onClick={() => setSort((x) => ({ key, dir: x.key === key && x.dir === 'desc' ? 'asc' : 'desc' }))}>
@@ -370,8 +370,8 @@ export function BranchesPage({ data, delivery, targets, levels }) {
           </table>
         </div>
         <p className="muted">
-          SLA التسليم = متوسط مدة التسليم بالأيام (من الاستلام لآخر حالة) للشحنات المسلّمة، لنفس العملاء المحسوبين في باقي المؤشرات (الموجودين في الـ3 شهور السابقة والشهر المقاس)،
-          مقارنة بمتوسط آخر 3 شهور. التحسن = المتوسط السابق − متوسط الشهر المقاس؛ النقص تحسّن.
+          SLA التسليم = متوسط مدة التسليم بالأيام (من الاستلام لآخر حالة) للشحنات المسلّمة، لنفس عملاء نسبة التسليم (الموجودين في الـ3 شهور السابقة والشهر المقاس)،
+          مقارنة بشهر أكتوبر (الأساس) فقط. التحسن = متوسط أكتوبر − متوسط الشهر المقاس؛ النقص تحسّن.
         </p>
       </section>
     </>

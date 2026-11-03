@@ -1,5 +1,5 @@
 // Deterministic SAMPLE data — only used with ?demo=1 to preview the layout. NOT real ARRIVE data.
-const MONTHS = ['July', 'August', 'September', 'October'];
+const MONTHS = ['July', 'August', 'September', 'October', 'November'];
 function rng(seed) { let s = seed; return () => (s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296; }
 const BRANCHES = ['القاهرة', 'الجيزة', 'الإسكندرية', 'المنصورة', 'طنطا', 'أسيوط'];
 export function demoData() {
@@ -11,10 +11,10 @@ export function demoData() {
     const present = r() < 0.85 ? MONTHS : MONTHS.slice(1 + Math.floor(r() * 2));
     present.forEach((m, k) => {
       const t = Math.max(5, Math.round(size * (0.8 + r() * 0.4)));
-      const p = Math.min(0.98, base + (k === 3 ? lift : 0) + (r() - 0.5) * 0.04);
+      const p = Math.min(0.98, base + (k === 4 ? lift : 0) + (r() - 0.5) * 0.04);
       const ok = Math.round(t * p), paid = Math.round(ok * 0.05);
-      const first = Math.round((ok - paid) * (0.45 + (k === 3 ? lift * 1.5 : 0) + (r() - 0.5) * 0.06));
-      const deliv = ok - paid, days = 2.2 + (r() - 0.5) * 0.6 - (k === 3 ? lift * 2 : 0); // average delivery days (faster in the measured month when the customer improved)
+      const first = Math.round((ok - paid) * (0.45 + (k === 4 ? lift * 1.5 : 0) + (r() - 0.5) * 0.06));
+      const deliv = ok - paid, days = 2.2 + (r() - 0.5) * 0.6 - (k === 4 ? lift * 2 : 0); // average delivery days (faster in the measured month when the customer improved)
       v[m] = [t, deliv, paid, Math.max(0, Math.min(deliv, first)), Math.round(deliv * days * 10) / 10, deliv];
     });
     // split every month's counts across 1-3 branches (the parts add up exactly to the customer's totals)
