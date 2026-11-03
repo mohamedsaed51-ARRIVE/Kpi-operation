@@ -71,13 +71,13 @@ details.card summary { cursor: pointer; font-weight: 700; }
 .lv-acceptable .badge, .badge.lv-acceptable { background: var(--acc-bg); color: var(--acc-fg); }
 .lv-below .badge, .badge.lv-below { background: var(--bad-bg); color: var(--bad-fg); }
 .levels { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; font-size: 13px; color: var(--gray); }
-.toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; position: sticky; top: 0; z-index: 5; background: var(--card, #fff); padding: 8px 0; }
 
 /* ---------- tables ---------- */
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow: auto; max-height: 70vh; } /* the header row stays pinned while the rows scroll */
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { padding: 10px 12px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
-th { background: #F8FAFC; color: var(--gray); font-size: 12px; position: sticky; top: 0; }
+th { background: #F8FAFC; color: var(--gray); font-size: 12px; position: sticky; top: 0; z-index: 2; }
 th.sortable { cursor: pointer; user-select: none; }
 td.n { font-family: 'Inter', 'Cairo', sans-serif; direction: ltr; text-align: right; }
 tr.sel td { background: var(--subtle); }

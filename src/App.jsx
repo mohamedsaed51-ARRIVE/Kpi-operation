@@ -228,7 +228,7 @@ export default function App() {
             )}
 
             {current.kind === 'metric' && cur && (!cur.available ? <NeedsUpdate /> : cur.result && (
-              <MetricPage m={cur} month={month} setMonth={setMonth} hasBranches={hasBranches} targets={targets} />
+              <MetricPage key={current.id} m={cur} month={month} setMonth={setMonth} hasBranches={hasBranches} targets={targets} />
             ))}
 
             {current.kind === 'branches' && months.length > 0 && <BranchesPage data={data} delivery={results.delivery} targets={targets} levels={slaLevels} />}

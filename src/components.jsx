@@ -212,12 +212,13 @@ function TargetCells({ current, target }) {
 
 export function BranchesTable({ rows, result, hasData, targets }) {
   const [q, setQ] = useState('');
+  const [lv, setLv] = useState('all');
   const [sort, setSort] = useState({ key: 'delta', dir: 'desc' });
-  const list = useMemo(() => rows.filter((r) => !q || r.branch.includes(q.trim())).sort((a, b) => {
+  const list = useMemo(() => rows.filter((r) => (!q || r.branch.includes(q.trim())) && (lv === 'all' || r.level.key === lv)).sort((a, b) => {
     const A = a[sort.key], B = b[sort.key];
     const c = typeof A === 'string' ? A.localeCompare(B, 'ar') : A - B;
     return sort.dir === 'asc' ? c : -c;
-  }), [rows, q, sort]);
+  }), [rows, q, lv, sort]);
   if (!hasData) return <div className="alert warn">بيانات الفروع مش موجودة في رد السيرفر. السيرفر لسه على نسخة قديمة من <code>Code.gs</code>. حدّث الكود (فيه <code>withBranches</code>) في Apps Script واعمل Deploy جديد على نفس الـ Deployment. للتأكد افتح الرابط <code>…/exec?action=clientMonthly&amp;withBranches=1</code> ولازم تلاقي <code>"branches"</code> في الرد.</div>;
   const th = (key, label) => (
     <th onClick={() => setSort((s) => ({ key, dir: s.key === key && s.dir === 'desc' ? 'asc' : 'desc' }))} className="sortable">
@@ -227,7 +228,13 @@ export function BranchesTable({ rows, result, hasData, targets }) {
   const tot = rows.reduce((s, r) => ({ t: s.t + r.curTotal, ok: s.ok + r.curSuccess }), { t: 0, ok: 0 });
   return (
     <>
-      <div className="toolbar"><input placeholder="ابحث باسم الفرع…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+      <div className="toolbar">
+        <input placeholder="ابحث باسم الفرع…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <select value={lv} onChange={(e) => setLv(e.target.value)}>
+          <option value="all">كل التقييمات ({rows.length})</option>
+          {result.metric.levels.map((l) => <option key={l.key} value={l.key}>{l.label} ({rows.filter((r) => r.level.key === l.key).length})</option>)}
+        </select>
+      </div>
       <div className="table-wrap">
         <table>
           <thead>

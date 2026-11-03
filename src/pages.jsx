@@ -286,11 +286,12 @@ export function BranchesPage({ data, delivery, targets, levels }) {
   );
   const [sort, setSort] = useState({ key: 'improvement', dir: 'desc' });
   const [q, setQ] = useState('');
-  const list = useMemo(() => rows.filter((r) => !q || r.branch.includes(q.trim())).sort((a, b) => {
+  const [lv, setLv] = useState('all');
+  const list = useMemo(() => rows.filter((r) => (!q || r.branch.includes(q.trim())) && (lv === 'all' || r.level.key === lv)).sort((a, b) => {
     const A = a[sort.key], B = b[sort.key];
     const c = typeof A === 'string' ? A.localeCompare(B, 'ar') : A - B;
     return sort.dir === 'asc' ? c : -c;
-  }), [rows, q, sort]);
+  }), [rows, q, lv, sort]);
   if (!available) return <div className="alert warn">بيانات SLA التسليم مش موجودة في رد السيرفر. اتأكد إن الباك إند المنشور هو آخر نسخة من <code>backend/Code.gs</code>.</div>;
   if (!ev || !group) return <div className="alert warn">مفيش بيانات كفاية لحساب SLA الفروع في الشهر المختار.</div>;
   const counts = Object.fromEntries(levels.map((l) => [l.key, rows.filter((r) => r.level.key === l.key).length]));
@@ -308,7 +309,13 @@ export function BranchesPage({ data, delivery, targets, levels }) {
         <div className="levels" style={{ marginBottom: 10 }}>
           {levels.map((l) => <span key={l.key} className="lvl-chip"><Badge level={l} /> {num(counts[l.key])} فرع</span>)}
         </div>
-        <div className="toolbar"><input placeholder="ابحث باسم الفرع…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+        <div className="toolbar">
+          <input placeholder="ابحث باسم الفرع…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <select value={lv} onChange={(e) => setLv(e.target.value)}>
+            <option value="all">كل التقييمات ({rows.length})</option>
+            {levels.map((l) => <option key={l.key} value={l.key}>{l.label} ({counts[l.key]})</option>)}
+          </select>
+        </div>
         <div className="table-wrap">
           <table>
             <thead>
