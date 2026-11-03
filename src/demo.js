@@ -43,3 +43,18 @@ export function demoData() {
 export function demoTargets() {
   return { delivery: { 'القاهرة': 85, 'الجيزة': 82 }, firstAttempt: { 'القاهرة': 40 }, sla: { 'القاهرة': 2.0, 'الجيزة': 2.0 } };
 }
+
+// Sample «SLA المرتجعات» rows (same compact shape as Code-SLA.gs) — demo only.
+export function demoReturns() {
+  const r = rng(11);
+  const senders = Array.from({ length: 12 }, (_, i) => `راسل تجريبي ${i + 1}`);
+  const branches = ['فرع رئيسى', 'الهرم', 'منصوره', 'طنطا', 'المعادى', 'فرع الشروق'];
+  const rows = [];
+  for (let i = 0; i < 400; i++) {
+    const day = 1 + Math.floor(r() * 25), age = Math.floor(r() * 7);
+    const close = `2026-09-${String(day).padStart(2, '0')}`;
+    const ret = `2026-09-${String(Math.min(30, day + age)).padStart(2, '0')}`;
+    rows.push([`9${100000 + i}`, Math.floor(r() * senders.length), `2026-09-${String(Math.max(1, day - 1)).padStart(2, '0')}`, 0, close, Math.floor(r() * branches.length), 0, ret, age, 0]);
+  }
+  return { ok: true, updatedAt: '2026-10-26T00:00:00.000Z', dict: { senders, statuses: ['في المخزن'], branches, finals: ['تم الارتجاع للراسل'], tabs: ['1-9'] }, rows };
+}

@@ -10,6 +10,8 @@ import {
 import { BranchesPage, DataQualityPage, SettingsPage, SlaOverviewCards } from './pages.jsx';
 import { SLA } from './lib/sla.js';
 import { levelsFor, withLevels } from './lib/levels.js';
+import ReturnsSlaPage from './ReturnsSlaPage.jsx';
+import { returnsSlaLimit } from './lib/returnsSla.js';
 
 const Icon = ({ d }) => (
   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
@@ -21,6 +23,7 @@ const SECTIONS = [
   { id: 'delivery', kind: 'metric', metric: 'delivery', group: 'المؤشرات', icon: 'M3 7h11v9H3zM14 10h4l3 3v3h-7zM7 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM17 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3z' },
   { id: 'firstAttempt', kind: 'metric', metric: 'firstAttempt', group: 'المؤشرات', icon: 'M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 16.9 5.9 20.4l1.5-6.8L2.2 9l6.9-.7z' },
   { id: 'branches', kind: 'branches', group: 'المؤشرات', label: 'Branch SLA', icon: 'M12 21s7-6.2 7-11.5A7 7 0 005 9.5C5 14.8 12 21 12 21zM12 12a2.5 2.5 0 100-5 2.5 2.5 0 000 5z', sub: SLA.description },
+  { id: 'returnsSla', kind: 'returnsSla', group: 'المؤشرات', label: 'SLA المرتجعات', icon: 'M9 14l-4-4 4-4M5 10h9a5 5 0 010 10h-3', sub: 'عمر المرتجع من تقفيل الشحنة لتقفيل المرتجع — من شيت Sla RTO' },
   { id: 'quality', kind: 'quality', group: 'أدوات', label: 'جودة البيانات', icon: 'M9 12l2 2 4-4M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z', sub: 'تغطية الشهور وفحص البيانات والتصنيف — منفصلة عن المؤشرات' },
   { id: 'settings', kind: 'settings', group: 'أدوات', label: 'الإعدادات', icon: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z', sub: 'مقاييس التقييم (مقبول / المطلوب / ممتاز) وتارجت الفروع لكل مؤشر' },
 ];
@@ -178,10 +181,12 @@ export default function App() {
 
         {demo && <div className="alert warn">⚠ بيانات تجريبية للمعاينة فقط (<code>?demo=1</code>) — مش أرقام ARRIVE الحقيقية.</div>}
         {!demo && !API_URL && <div className="alert err"><b>رابط الباك إند لسه ما اتضبطش.</b> انشر <code>backend/Code.gs</code> كمشروع Apps Script مستقل وحط رابطه في <code>VITE_API_URL</code>.</div>}
-        {error && API_URL && <div className="alert err"><b>تعذر تحميل البيانات.</b> {error}</div>}
-        {loading && !data && API_URL && <div className="alert">جاري تحميل البيانات من Google Sheets… (أول مرة ممكن ياخد وقت)</div>}
+        {error && API_URL && current.kind !== 'returnsSla' && <div className="alert err"><b>تعذر تحميل البيانات.</b> {error}</div>}
+        {loading && !data && API_URL && current.kind !== 'returnsSla' && <div className="alert">جاري تحميل البيانات من Google Sheets… (أول مرة ممكن ياخد وقت)</div>}
 
-        {data && (
+        {current.kind === 'returnsSla' && <ReturnsSlaPage key="returnsSla" limit={returnsSlaLimit(targets)} demo={demo} />}
+
+        {data && current.kind !== 'returnsSla' && (
           <>
             {needsControls(current.kind) && (
               <section className="controls">

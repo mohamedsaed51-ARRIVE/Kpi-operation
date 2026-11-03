@@ -3,6 +3,7 @@ import { MONTH_AR, METRICS } from './lib/quality.js';
 import { cleanTargets, invalidCells, meetsMaxTarget, normBranch, targetFor } from './lib/targets.js';
 import { apiChecks, monthCoverage, namesWithEntities, similarNames } from './lib/dataQuality.js';
 import { SLA, evaluateSlaBranches, thresholdsTextSla } from './lib/sla.js';
+import { RETURNS_SLA_KEY } from './lib/returnsSla.js';
 import { LEVEL_FIELDS, DEFAULT_THRESHOLDS, isReservedKey, levelKey, thresholdsValid } from './lib/levels.js';
 import { Badge, CustomersTable, Kpi, KpiCards, num } from './components.jsx';
 
@@ -142,7 +143,7 @@ export function SettingsPage({ branches, targets, onSave, unavailableReason }) {
   const levelCell = (metricId, field) => draft[metricId]?.[levelKey(field)] ?? '';
   const effective = (metricId) => Object.fromEntries(LEVEL_FIELDS.map((f) => [f, levelCell(metricId, f) === '' ? DEFAULT_THRESHOLDS[metricId][f] : levelCell(metricId, f)]));
   const badLevels = SETTINGS_METRICS.filter((m) => !thresholdsValid(effective(m.id)));
-  const resetLevels = () => setDraft((d) => Object.fromEntries(Object.entries(d).map(([id, cells]) => [id, Object.fromEntries(Object.entries(cells).filter(([k]) => !isReservedKey(k)))])));
+  const resetLevels = () => setDraft((d) => Object.fromEntries(Object.entries(d).map(([id, cells]) => [id, Object.fromEntries(Object.entries(cells).filter(([k]) => !k.startsWith('__level_')))])));
   const save = async () => {
     setState({ saving: true, message: '', error: '' });
     try { await onSave(cleanTargets(draft)); setState({ saving: false, message: 'تم حفظ الإعدادات على السيرفر.', error: '' }); }
@@ -181,6 +182,18 @@ export function SettingsPage({ branches, targets, onSave, unavailableReason }) {
       </div>
       {badLevels.length > 0 && <div className="alert err" style={{ marginTop: 12 }}>ترتيب المقاييس غير صحيح في: {badLevels.map((m) => (m.id === 'sla' ? 'Branch SLA' : m.label)).join('، ')} — لازم مقبول ≤ المطلوب ≤ ممتاز، وبدون قيم سالبة.</div>}
       <div style={{ marginTop: 10 }}><button className="btn ghost" style={{ marginTop: 0 }} onClick={resetLevels}>رجّع القيم الافتراضية</button></div>
+    </section>
+
+    <section className="card">
+      <h2>حد SLA المرتجعات</h2>
+      <p className="muted">
+        أقصى عمر مقبول للمرتجع بالأيام (من تقفيل الشحنة لتقفيل المرتجع). المرتجع «داخل الحد» لو عمره ≤ الحد، ويظهر في تاب «SLA المرتجعات».
+        اتركه فاضي لو مفيش حد معتمد (مفيش حكم داخل/خارج الحد).
+      </p>
+      <label>حد الـ SLA (أيام)
+        <input type="number" min="0" max="60" step="1" placeholder="غير محدد" value={draft.sla?.[RETURNS_SLA_KEY] ?? ''}
+          className={badKey.has(`sla|${RETURNS_SLA_KEY}`) ? 'invalid' : ''} onChange={(e) => setCell('sla', RETURNS_SLA_KEY, e.target.value)} />
+      </label>
     </section>
 
     <section className="card">

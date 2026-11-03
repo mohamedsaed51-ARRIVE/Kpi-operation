@@ -19,3 +19,27 @@ export async function fetchClientMonthly() {
 }
 export const fetchTargets = () => call({ action: 'getKpiTargets' }).then((d) => d.targets);
 export const saveTargets = (targets) => call({ action: 'saveKpiTargets', targets: JSON.stringify(targets) }).then((d) => d.targets);
+
+// ---- SLA المرتجعات (separate source: the «Sla RTO» sheet) ----
+import { RETURNS_SLA_URL } from './config.js';
+
+export async function fetchReturnsLive() {
+  const res = await fetch(RETURNS_SLA_URL, { cache: 'no-store' });
+  const txt = await res.text();
+  let j;
+  try { j = JSON.parse(txt); } catch { throw new Error(`الرد ليس JSON (HTTP ${res.status}) — غالبًا النشر ليس «Anyone» أو الرابط ليس رابط Web app`); }
+  if (!j.ok) throw new Error(j.error || 'رد غير صالح من شيت SLA المرتجعات');
+  return j;
+}
+
+/** Static snapshot (public/sla-data.js, 26/10/2026) — used only when the live sheet cannot be reached. */
+export function fetchReturnsSnapshot() {
+  return new Promise((resolve) => {
+    if (window.RTO_SNAP) return resolve(window.RTO_SNAP);
+    const s = document.createElement('script');
+    s.src = `${import.meta.env.BASE_URL}sla-data.js`;
+    s.onload = () => resolve(window.RTO_SNAP || null);
+    s.onerror = () => resolve(null);
+    document.head.appendChild(s);
+  });
+}

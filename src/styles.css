@@ -130,3 +130,28 @@ code { background: #EEF2F7; padding: 1px 5px; border-radius: 4px; font-size: 12p
 td input[type=number] { width: 130px; min-width: 0; }
 input.invalid { border-color: #EF4444; background: #FFF5F5; }
 ul.plain { margin: 6px 0 0; padding-inline-start: 20px; line-height: 1.9; }
+
+/* ---- SLA المرتجعات ---- */
+.ms-field { position: relative; }
+.ms { min-width: 170px; }
+.ms > summary { list-style: none; cursor: pointer; padding: 8px 10px; border: 1px solid #CBD5E1; border-radius: 8px; background: #fff; min-height: 38px; }
+.ms > summary::-webkit-details-marker { display: none; }
+.ms-panel { position: absolute; z-index: 20; inset-inline-start: 0; top: 100%; margin-top: 4px; background: #fff; border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 8px; width: 260px; max-height: 300px; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+.ms-panel input[type=text], .ms-panel input:not([type]) { min-width: 0; }
+.ms-option { display: flex; gap: 8px; align-items: center; font-size: 13px; padding: 2px 4px; }
+.ms-option input { min-width: 0; }
+.ctl-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-inline-start: auto; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+.hbars { display: flex; flex-direction: column; gap: 6px; }
+.hbar { display: grid; grid-template-columns: minmax(90px, 34%) 1fr 48px; gap: 8px; align-items: center; font-size: 12.5px; }
+.hbar.click { cursor: pointer; } .hbar.click:hover .hbar-l { color: var(--blue); }
+.hbar-t { background: #EEF2F7; border-radius: 6px; height: 12px; overflow: hidden; }
+.hbar-f { display: block; height: 100%; border-radius: 6px; }
+.hbar-v { font-family: 'Inter', sans-serif; direction: ltr; text-align: right; color: var(--gray); }
+.scroll-y { max-height: 360px; overflow: auto; }
+.chart-svg { width: 100%; height: auto; max-height: 260px; }
+.flag-pill { display: inline-block; background: #FFF3D6; color: #8A5A00; border-radius: 999px; padding: 1px 8px; font-size: 11.5px; margin: 1px 2px; }
+.pager { display: flex; gap: 14px; align-items: center; justify-content: center; margin-top: 10px; }
+tr.sel { background: #EAF3FF; }
+.grid-2 > * { min-width: 0; }
