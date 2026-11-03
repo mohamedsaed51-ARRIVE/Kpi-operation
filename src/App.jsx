@@ -137,6 +137,7 @@ export default function App() {
   const dLevels = JSON.stringify(levelsFor(targets, 'delivery').map((l) => l.minDelta));
   const fLevels = JSON.stringify(levelsFor(targets, 'firstAttempt').map((l) => l.minDelta));
   const slaLevels = useMemo(() => levelsFor(targets, 'sla'), [targets]);
+  const returnsLevels = useMemo(() => levelsFor(targets, 'returnsSla'), [targets]);
   const deliveryMetric = useMemo(() => withLevels(METRICS.delivery, targets), [dLevels]); // eslint-disable-line react-hooks/exhaustive-deps
   const firstMetric = useMemo(() => withLevels(METRICS.firstAttempt, targets), [fLevels]); // eslint-disable-line react-hooks/exhaustive-deps
   const results = {
@@ -208,7 +209,7 @@ export default function App() {
         {error && API_URL && current.kind !== 'returnsSla' && <div className="alert err"><b>تعذر تحميل البيانات.</b> {error}</div>}
         {loading && !data && API_URL && current.kind !== 'returnsSla' && <div className="alert">جاري تحميل البيانات من Google Sheets… (أول مرة ممكن ياخد وقت)</div>}
 
-        {current.kind === 'returnsSla' && <ReturnsSlaPage key="returnsSla" limit={returnsSlaLimit(targets)} demo={demo} />}
+        {current.kind === 'returnsSla' && <ReturnsSlaPage key="returnsSla" limit={returnsSlaLimit(targets)} levels={returnsLevels} demo={demo} />}
 
         {data && current.kind !== 'returnsSla' && (
           <>

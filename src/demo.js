@@ -50,11 +50,10 @@ export function demoReturns() {
   const senders = Array.from({ length: 12 }, (_, i) => `راسل تجريبي ${i + 1}`);
   const branches = ['فرع رئيسى', 'الهرم', 'منصوره', 'طنطا', 'المعادى', 'فرع الشروق'];
   const rows = [];
-  for (let i = 0; i < 400; i++) {
-    const day = 1 + Math.floor(r() * 25), age = Math.floor(r() * 7);
-    const close = `2026-09-${String(day).padStart(2, '0')}`;
-    const ret = `2026-09-${String(Math.min(30, day + age)).padStart(2, '0')}`;
-    rows.push([`9${100000 + i}`, Math.floor(r() * senders.length), `2026-09-${String(Math.max(1, day - 1)).padStart(2, '0')}`, 0, close, Math.floor(r() * branches.length), 0, ret, age, 0]);
+  for (let i = 0; i < 1200; i++) {
+    const mo = 6 + Math.floor(r() * 4), day = 1 + Math.floor(r() * 24), age = Math.floor(r() * (mo === 9 ? 5 : 7)); // September is a little faster in the sample
+    const d = (x) => `2026-${String(mo).padStart(2, '0')}-${String(x).padStart(2, '0')}`;
+    rows.push([`9${100000 + i}`, Math.floor(r() * senders.length), d(Math.max(1, day - 1)), 0, d(day), Math.floor(r() * branches.length), 0, d(Math.min(28, day + age)), age, 0]);
   }
   return { ok: true, updatedAt: '2026-10-26T00:00:00.000Z', dict: { senders, statuses: ['في المخزن'], branches, finals: ['تم الارتجاع للراسل'], tabs: ['1-9'] }, rows };
 }

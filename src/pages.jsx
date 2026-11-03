@@ -4,7 +4,7 @@ import { cleanTargets, invalidCells, meetsMaxTarget, normBranch, targetFor } fro
 import { apiChecks, monthCoverage, namesWithEntities, similarNames } from './lib/dataQuality.js';
 import { SLA, evaluateSlaBranches, thresholdsTextSla } from './lib/sla.js';
 import { RETURNS_SLA_KEY } from './lib/returnsSla.js';
-import { LEVEL_FIELDS, DEFAULT_THRESHOLDS, isReservedKey, levelKey, thresholdsValid } from './lib/levels.js';
+import { LEVEL_FIELDS, DEFAULT_THRESHOLDS, isReservedKey, levelLocation, thresholdsValid } from './lib/levels.js';
 import { Badge, CustomersTable, Kpi, KpiCards, num } from './components.jsx';
 
 /* ------------------------------------------------------------------ العملاء */
@@ -112,6 +112,7 @@ export function DataQualityPage({ data }) {
 
 /* ------------------------------------------------------------------ الإعدادات */
 // One column per KPI: percentage targets (higher is better) and the SLA target in days (lower is better).
+const LEVEL_ROW_EXTRA = { id: 'returnsSla', label: 'SLA المرتجعات', unit: 'يوم', max: 60, step: 0.01 };
 const SETTINGS_METRICS = [
   { id: 'delivery', label: METRICS.delivery.label, unit: '٪', max: 100, step: 0.1, example: 'مثلاً 90' },
   { id: 'firstAttempt', label: METRICS.firstAttempt.label, unit: '٪', max: 100, step: 0.1, example: 'مثلاً 45' },
@@ -140,9 +141,11 @@ export function SettingsPage({ branches, targets, onSave, unavailableReason }) {
     ...d,
     [metricId]: { ...Object.fromEntries(Object.entries(d[metricId] || {}).filter(([k]) => isReservedKey(k))), ...Object.fromEntries(all.map((b) => [b, bulk[metricId]])) },
   }));
-  const levelCell = (metricId, field) => draft[metricId]?.[levelKey(field)] ?? '';
+  const levelRows = [...SETTINGS_METRICS, LEVEL_ROW_EXTRA];
+  const levelCell = (metricId, field) => { const [b, k] = levelLocation(metricId, field); return draft[b]?.[k] ?? ''; };
+  const setLevel = (metricId, field, v) => { const [b, k] = levelLocation(metricId, field); setCell(b, k, v); };
   const effective = (metricId) => Object.fromEntries(LEVEL_FIELDS.map((f) => [f, levelCell(metricId, f) === '' ? DEFAULT_THRESHOLDS[metricId][f] : levelCell(metricId, f)]));
-  const badLevels = SETTINGS_METRICS.filter((m) => !thresholdsValid(effective(m.id)));
+  const badLevels = levelRows.filter((m) => !thresholdsValid(effective(m.id)));
   const resetLevels = () => setDraft((d) => Object.fromEntries(Object.entries(d).map(([id, cells]) => [id, Object.fromEntries(Object.entries(cells).filter(([k]) => !k.startsWith('__level_')))])));
   const save = async () => {
     setState({ saving: true, message: '', error: '' });
@@ -158,21 +161,21 @@ export function SettingsPage({ branches, targets, onSave, unavailableReason }) {
       <h2>مقاييس التقييم</h2>
       <p className="muted">
         الحد الأدنى للتحسن عشان المؤشر يتقيّم «مقبول» أو «المطلوب» أو «ممتاز». نسبة التسليم: زيادة بالنقاط المئوية عن متوسط آخر 3 شهور. First Attempt: زيادة بالنقاط المئوية عن شهر أكتوبر.
-        Branch SLA: نقص في متوسط مدة التسليم بالأيام عن أكتوبر (الأسرع أحسن). الخانة الفاضية = القيمة الافتراضية. لازم مقبول ≤ المطلوب ≤ ممتاز.
+        Branch SLA: نقص في متوسط مدة التسليم بالأيام عن أكتوبر (الأسرع أحسن). SLA المرتجعات: نقص في متوسط عمر المرتجع بالأيام عن متوسط آخر 3 شهور (من غير تقسيم على العملاء). الخانة الفاضية = القيمة الافتراضية. لازم مقبول ≤ المطلوب ≤ ممتاز.
       </p>
       <div className="table-wrap">
         <table>
           <thead><tr><th>المؤشر</th><th>الوحدة</th><th>مقبول</th><th>المطلوب</th><th>ممتاز</th></tr></thead>
           <tbody>
-            {SETTINGS_METRICS.map((m) => (
+            {levelRows.map((m) => (
               <tr key={m.id}>
                 <td>{m.id === 'sla' ? 'Branch SLA' : m.label}</td>
-                <td>{m.id === 'sla' ? 'يوم أسرع (≥)' : 'نقطة مئوية زيادة (≥)'}</td>
+                <td>{m.id === 'sla' || m.id === 'returnsSla' ? 'يوم أسرع (≥)' : 'نقطة مئوية زيادة (≥)'}</td>
                 {LEVEL_FIELDS.map((f) => (
                   <td key={f}>
                     <input type="number" min="0" max={m.max} step={m.step} placeholder={String(DEFAULT_THRESHOLDS[m.id][f])}
                       className={badLevels.includes(m) ? 'invalid' : ''}
-                      value={levelCell(m.id, f)} onChange={(e) => setCell(m.id, levelKey(f), e.target.value)} />
+                      value={levelCell(m.id, f)} onChange={(e) => setLevel(m.id, f, e.target.value)} />
                   </td>
                 ))}
               </tr>

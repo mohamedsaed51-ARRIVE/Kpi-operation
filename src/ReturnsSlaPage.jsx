@@ -2,8 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { fetchReturnsLive, fetchReturnsSnapshot } from './api.js';
 import { RETURNS_SLA_URL } from './config.js';
 import { demoReturns } from './demo.js';
-import { Kpi } from './components.jsx';
-import { AGE_BUCKETS, FLAGS, UNKNOWN, ageOf, decodeReturns, filterReturns, groupStats, stats } from './lib/returnsSla.js';
+import { Badge, Kpi } from './components.jsx';
+import { levelFor } from './lib/quality.js';
+import { AGE_BUCKETS, FLAGS, UNKNOWN, ageOf, comparableMonths, decodeReturns, evaluateReturnsMonth, filterReturns, groupStats, monthLabel, stats } from './lib/returnsSla.js';
 
 const fmt = (n) => (n == null || Number.isNaN(n) ? '—' : Number(n).toLocaleString('en-US'));
 const f1 = (n) => (n == null || Number.isNaN(n) ? '—' : Number(n).toLocaleString('en-US', { maximumFractionDigits: 1 }));
@@ -87,7 +88,7 @@ const cmp = (a, b, k, d) => {
 
 let CACHE = null; // decoded rows survive tab switches; the «تحديث» button reloads
 
-export default function ReturnsSlaPage({ limit, demo }) {
+export default function ReturnsSlaPage({ limit, demo, levels }) {
   const [rows, setRows] = useState(CACHE?.rows || null);
   const [meta, setMeta] = useState(CACHE?.meta || { source: '', updatedAt: null });
   const [error, setError] = useState(CACHE?.error || '');
@@ -98,6 +99,7 @@ export default function ReturnsSlaPage({ limit, demo }) {
   const [sdSort, setSdSort] = useState(['rows', -1]);
   const [logSort, setLogSort] = useState(['ret', -1]);
   const [page, setPage] = useState(1);
+  const [cmpMonth, setCmpMonth] = useState('');
   const size = 25;
 
   const load = async () => {
@@ -145,6 +147,12 @@ export default function ReturnsSlaPage({ limit, demo }) {
   const pages = Math.max(1, Math.ceil(log.length / size));
   const pg = Math.min(page, pages);
 
+  // Comparison (3 previous months vs the chosen month): all return rows after the page filters, ignoring the date range filter, no customer split.
+  const cmpRows = useMemo(() => (rows ? filterReturns(rows, { ...f, from: '', to: '' }) : []), [rows, f]);
+  const months = useMemo(() => comparableMonths(cmpRows, age), [cmpRows, age]);
+  const chosen = months.comparable.includes(cmpMonth) ? cmpMonth : (months.comparable[months.comparable.length - 1] || '');
+  const compare = useMemo(() => (chosen ? evaluateReturnsMonth(cmpRows, chosen, age, levels, levelFor) : null), [cmpRows, chosen, age, levels]);
+
   const active = (f.q.trim() ? 1 : 0) + f.branches.size + f.statuses.size + f.senders.size + (f.from ? 1 : 0) + (f.to ? 1 : 0) + (f.dup !== 'all' ? 1 : 0);
   const reset = () => set({ q: '', branches: new Set(), statuses: new Set(), senders: new Set(), from: '', to: '', dup: 'all' });
   const pick = (field, key) => { const s = new Set(f[field]); s.has(key) ? s.delete(key) : s.add(key); set({ [field]: s }); };
@@ -189,6 +197,59 @@ export default function ReturnsSlaPage({ limit, demo }) {
         المصدر: {meta.source === 'live' ? 'مباشر من شيت Sla RTO' : meta.source === 'demo' ? 'بيانات تجريبية' : 'لقطة ثابتة'}
         {meta.updatedAt ? ` — ${dmy(String(meta.updatedAt).slice(0, 10))}` : ''}. عمر المرتجع = تاريخ تقفيل المرتجع − تاريخ تقفيل الشحنة.
       </p>
+
+      <section className="card">
+        <h2>مقارنة SLA المرتجعات — آخر 3 شهور مقابل الشهر المختار</h2>
+        <p className="muted">
+          من غير تقسيم على العملاء: كل صفوف الشيت (بعد الفلاتر ما عدا التاريخ). الشهر = شهر «تاريخ تقفيل المرتجع».
+          التحسن = متوسط عمر المرتجع في الـ3 شهور السابقة − متوسط الشهر المختار (النقص تحسّن). المقاييس من الإعدادات:
+          {' '}{levels.slice(0, 3).reverse().map((l) => `${l.label} ≥ ${l.minDelta}`).join(' · ')} يوم أسرع.
+        </p>
+        {!months.comparable.length ? (
+          <div className="alert warn">
+            مفيش شهر معاه 3 شهور سابقة في البيانات الحالية.
+            {' '}الشهور المتاحة (بتاريخ تقفيل المرتجع): {months.present.length ? months.present.map(monthLabel).join('، ') : 'لا يوجد'}.
+            {' '}المقارنة هتشتغل أول ما تتوفر 3 شهور قبل الشهر المطلوب في شيت Sla RTO.
+          </div>
+        ) : (
+          <>
+            <div className="controls" style={{ boxShadow: 'none', padding: 0, border: 0 }}>
+              <label>الشهر المقاس
+                <select value={chosen} onChange={(e) => setCmpMonth(e.target.value)}>
+                  {months.comparable.map((k) => <option key={k} value={k}>{monthLabel(k)}</option>)}
+                </select>
+              </label>
+            </div>
+            {compare?.group ? (
+              <>
+                <section className="kpis">
+                  <Kpi title="متوسط عمر المرتجع — آخر 3 شهور" value={`${f1(compare.group.baseline)} يوم`} sub={`${compare.prev.map(monthLabel).join(' + ')} · ${fmt(compare.group.nBase)} مرتجع`} />
+                  <Kpi title={`متوسط عمر المرتجع — ${monthLabel(compare.month)}`} value={`${f1(compare.group.current)} يوم`} tone="brand" sub={`${fmt(compare.group.nCur)} مرتجع`} />
+                  <Kpi title="التحسن" value={`${compare.group.improvement > 0 ? '+' : ''}${compare.group.improvement.toFixed(3)} يوم`} tone={compare.group.improvement >= 0 ? 'good' : 'bad'} sub="الموجب = أسرع من متوسط الـ3 شهور" />
+                  <div className={`kpi verdict ${compare.group.level ? `lv-${compare.group.level.key}` : ''}`}>
+                    <div className="kpi-title">التقييم</div>
+                    <div className="kpi-value"><Badge level={compare.group.level} /></div>
+                    <div className="kpi-sub">{levels.slice(0, 3).reverse().map((l) => `${l.label} ≥ ${l.minDelta}`).join(' · ')} يوم أسرع</div>
+                  </div>
+                </section>
+                <h3 className="sub-h">الفروع — {monthLabel(compare.month)} ({fmt(compare.branches.length)} فرع)</h3>
+                <div className="table-wrap"><table>
+                  <thead><tr><th>الفرع</th><th>متوسط الـ3 شهور (يوم)</th><th>{monthLabel(compare.month)} (يوم)</th><th>التحسن (يوم)</th><th>التقييم</th><th>مرتجعات الشهر</th></tr></thead>
+                  <tbody>
+                    {[...compare.branches].sort((a, b) => b.improvement - a.improvement).map((b) => (
+                      <tr key={b.branch}>
+                        <td>{b.branch}</td><td className="n">{f1(b.baseline)}</td><td className="n"><b>{f1(b.current)}</b></td>
+                        <td className="n">{b.improvement > 0 ? '+' : ''}{b.improvement.toFixed(3)}</td><td><Badge level={b.level} /></td><td className="n">{fmt(b.nCur)}</td>
+                      </tr>
+                    ))}
+                    {!compare.branches.length && <tr><td colSpan="6" className="muted center">مفيش فرع ليه مرتجعات في الـ3 شهور السابقة والشهر المقاس</td></tr>}
+                  </tbody>
+                </table></div>
+              </>
+            ) : <div className="alert warn">مفيش مرتجعات ليها عمر في الشهر أو في الـ3 شهور السابقة ضمن الفلاتر الحالية.</div>}
+          </>
+        )}
+      </section>
 
       <section className="kpis">
         <Kpi title="عدد المرتجعات" value={fmt(T.rows)} sub={`${fmt(new Set(cur.map((r) => r.wb)).size)} بوليصة مميزة`} />

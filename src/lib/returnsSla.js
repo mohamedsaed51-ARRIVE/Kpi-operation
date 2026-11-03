@@ -99,3 +99,65 @@ export function returnsSlaLimit(targets) {
   const v = targets?.sla?.[RETURNS_SLA_KEY];
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Comparison like the other KPIs, but WITHOUT the customers split: all return rows of the sheet (after the page filters).
+//   month = calendar month of «تاريخ تقفيل المرتجع»; baseline = pooled average age of the 3 previous months;
+//   improvement (days) = baseline − current (a shorter return age is better) → level from the thresholds saved in Settings.
+// ---------------------------------------------------------------------------------------------------------------
+export const monthKeyOf = (r) => (r.ret ? r.ret.slice(0, 7) : null); // 'YYYY-MM'
+
+export function previousMonthKeys(key, count = 3) {
+  let y = +key.slice(0, 4), m = +key.slice(5, 7);
+  const out = [];
+  for (let i = 0; i < count; i++) { m -= 1; if (m === 0) { m = 12; y -= 1; } out.unshift(`${y}-${String(m).padStart(2, '0')}`); }
+  return out;
+}
+
+const AR_MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+export const monthLabel = (key) => `${AR_MONTHS[+key.slice(5, 7) - 1]} ${key.slice(0, 4)}`;
+
+/** Sum of ages and count per month key (and per branch when byBranch). */
+function monthSums(rows, ageFn) {
+  const all = new Map(), br = new Map();
+  for (const r of rows) {
+    const k = monthKeyOf(r), a = ageFn(r);
+    if (!k || a == null) continue;
+    const g = all.get(k) || [0, 0]; g[0] += a; g[1] += 1; all.set(k, g);
+    const bm = br.get(r.branch) || new Map();
+    const c = bm.get(k) || [0, 0]; c[0] += a; c[1] += 1; bm.set(k, c); br.set(r.branch, bm);
+  }
+  return { all, br };
+}
+
+const pooled = (cells, keys) => {
+  let s = 0, n = 0;
+  for (const k of keys) { const c = cells.get(k); if (c) { s += c[0]; n += c[1]; } }
+  return n ? { avg: s / n, n } : null;
+};
+
+/**
+ * rows = return rows (already filtered, without any date filter); levels = makeLevels() thresholds (days).
+ * Returns { month, prev, group, branches, available } where group = null when the baseline or the month has no aged returns.
+ */
+export function evaluateReturnsMonth(rows, month, ageFn, levels, levelFn) {
+  const prev = previousMonthKeys(month);
+  const { all, br } = monthSums(rows, ageFn);
+  const build = (cells) => {
+    const base = pooled(cells, prev), cur = pooled(cells, [month]);
+    if (!base || !cur) return null;
+    const improvement = base.avg - cur.avg;
+    return { baseline: base.avg, current: cur.avg, improvement, level: levelFn(improvement, levels), nBase: base.n, nCur: cur.n, monthAvgs: prev.map((k) => pooled(cells, [k])?.avg ?? null) };
+  };
+  const group = build(all);
+  const branches = [];
+  for (const [branch, cells] of br) { const r = build(cells); if (r) branches.push({ branch, ...r }); }
+  return { month, prev, group, branches, missingPrev: prev.filter((k) => !all.has(k)) };
+}
+
+/** Months that can be compared (they have aged returns and so do the 3 previous months), plus every month present. */
+export function comparableMonths(rows, ageFn) {
+  const { all } = monthSums(rows, ageFn);
+  const present = [...all.keys()].sort();
+  return { present, comparable: present.filter((k) => previousMonthKeys(k).every((p) => all.has(p))) };
+}
