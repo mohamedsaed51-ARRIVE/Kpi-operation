@@ -220,3 +220,51 @@ export function evaluateBranches(clients, branches, evaluated) {
   }
   return out;
 }
+
+/**
+ * What happened in ONE month (no comparison) — used for the baseline month (October) when no later month can be measured yet.
+ * only = Set of customer names to include (the «نسبة التسليم» customers), or null for every customer with shipments that month.
+ * Returns { month, customers, total, success, rate, rows (per customer), branchRows (per branch) }.
+ */
+export function monthSnapshot(clients, branches, metric, month, only = null) {
+  const rows = [], br = new Map();
+  let total = 0, success = 0;
+  for (const c of clients) {
+    if (only && !only.has(c.n)) continue;
+    const cell = c.v[month];
+    if (!tot(cell)) continue;
+    const ok = metric.success(cell);
+    rows.push({ name: c.n, total: cell[0], success: ok, rate: rate(ok, cell[0]) });
+    total += cell[0]; success += ok;
+    if (c.b && branches) {
+      for (const [bi, months] of Object.entries(c.b)) {
+        const bc = months[month];
+        if (!bc || !bc[0]) continue;
+        const a = br.get(bi) || { branch: branches[Number(bi)], customers: new Set(), total: 0, success: 0 };
+        a.customers.add(c.n); a.total += bc[0]; a.success += metric.success(bc);
+        br.set(bi, a);
+      }
+    }
+  }
+  const branchRows = [...br.values()].map((a) => ({ branch: a.branch, customers: a.customers.size, total: a.total, success: a.success, rate: rate(a.success, a.total) }));
+  return { month, customers: rows.length, total, success, rate: rate(success, total), rows, branchRows };
+}
+
+/** Same idea for the delivery-days SLA: average delivery days per branch in one month (cell[4] = sum of days, cell[5] = delivered with a date). */
+export function slaMonthSnapshot(clients, branches, month, only = null) {
+  const br = new Map(), names = new Set();
+  let days = 0, n = 0;
+  for (const c of clients) {
+    if (only && !only.has(c.n)) continue;
+    if (!c.b || !branches) continue;
+    for (const [bi, months] of Object.entries(c.b)) {
+      const cell = months[month];
+      if (!cell || cell.length < 6 || !cell[5]) continue;
+      const a = br.get(bi) || { branch: branches[Number(bi)], customers: new Set(), days: 0, n: 0 };
+      a.customers.add(c.n); a.days += cell[4]; a.n += cell[5];
+      br.set(bi, a); days += cell[4]; n += cell[5]; names.add(c.n);
+    }
+  }
+  const rows = [...br.values()].map((a) => ({ branch: a.branch, customers: a.customers.size, delivered: a.n, avg: a.days / a.n }));
+  return { month, customers: names.size, delivered: n, avg: n ? days / n : null, rows };
+}

@@ -3,11 +3,11 @@ import { fetchClientMonthly, fetchTargets, saveTargets } from './api.js';
 import { API_URL } from './config.js';
 import { demoData, demoTargets } from './demo.js';
 import { managementSummary } from './lib/summary.js';
-import { BASELINE_MONTH, METRICS, MONTH_AR, evaluateAllMonths, evaluateBranches, evaluateMonth } from './lib/quality.js';
+import { BASELINE_MONTH, METRICS, MONTH_AR, evaluateAllMonths, evaluateBranches, evaluateMonth, monthSnapshot, slaMonthSnapshot } from './lib/quality.js';
 import {
   Badge, BaselineChart, BranchesTable, CustomersTable, KpiCards, SummaryBox, TrendTable, num,
 } from './components.jsx';
-import { BranchesPage, DataQualityPage, SettingsPage, SlaOverviewCards } from './pages.jsx';
+import { BranchesPage, DataQualityPage, MonthSnapshotView, SettingsPage, SlaOverviewCards, SlaSnapshotView } from './pages.jsx';
 import { SLA } from './lib/sla.js';
 import { levelsFor, withLevels } from './lib/levels.js';
 import ReturnsSlaPage from './ReturnsSlaPage.jsx';
@@ -143,6 +143,14 @@ export default function App() {
     delivery: useMetricResults(data, deliveryMetric, month, opts, hasBranches),
     firstAttempt: useMetricResults(data, firstMetric, month, opts, hasBranches, deliveryMetric),
   };
+  // What happened in the baseline month itself (shown when it cannot be compared yet, and as an extra section otherwise).
+  const octNames = useMemo(() => {
+    if (!data) return null;
+    const r = evaluateMonth(data.clients, BASELINE_MONTH, { ...opts, metric: deliveryMetric });
+    return r.error ? null : new Set(r.rows.map((x) => x.name));
+  }, [data, opts, deliveryMetric]);
+  const faSnap = useMemo(() => (data && results.firstAttempt.available ? monthSnapshot(data.clients, data.branches, firstMetric, BASELINE_MONTH, octNames) : null), [data, octNames, firstMetric]); // eslint-disable-line react-hooks/exhaustive-deps
+  const slaSnap = useMemo(() => (data && SLA.available(data.clients) ? slaMonthSnapshot(data.clients, data.branches, BASELINE_MONTH, octNames) : null), [data, octNames]);
   // Branch SLA: same customers as «نسبة التسليم», baseline = the single baseline month (October).
   const slaDelivery = useMemo(() => {
     const r = results.delivery.result;
@@ -252,7 +260,19 @@ export default function App() {
               <MetricPage key={current.id} m={cur} month={month} setMonth={setMonth} hasBranches={hasBranches} targets={targets} />
             ))}
 
+            {current.kind === 'metric' && current.metric === 'firstAttempt' && cur?.available && (
+              cur.result
+                ? <details className="card"><summary>اللي حصل في {MONTH_AR[BASELINE_MONTH]} (شهر الأساس)</summary><MonthSnapshotView snap={faSnap} metric={firstMetric} /></details>
+                : <MonthSnapshotView snap={faSnap} metric={firstMetric} />
+            )}
+
             {current.kind === 'branches' && months.length > 0 && <BranchesPage data={data} delivery={slaDelivery} targets={targets} levels={slaLevels} />}
+
+            {current.kind === 'branches' && SLA.available(data.clients) && (
+              slaDelivery.result
+                ? <details className="card"><summary>اللي حصل في {MONTH_AR[BASELINE_MONTH]} (شهر الأساس)</summary><SlaSnapshotView snap={slaSnap} /></details>
+                : <SlaSnapshotView snap={slaSnap} />
+            )}
 
             {current.kind === 'quality' && <DataQualityPage data={data} />}
 

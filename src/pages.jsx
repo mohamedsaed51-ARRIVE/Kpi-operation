@@ -242,6 +242,75 @@ export function SettingsPage({ branches, targets, onSave, unavailableReason }) {
   );
 }
 
+/* ------------------------------------------------------------------ ما حصل في شهر الأساس (أكتوبر) */
+const SIMPLE_NUM = (n) => (n == null ? '—' : Number(n).toLocaleString('en-US'));
+const pc1 = (v) => (v == null ? '—' : `${v.toFixed(1)}%`);
+
+function SnapTable({ title, cols, rows, defaultSort }) {
+  const [sort, setSort] = useState(defaultSort);
+  const [q, setQ] = useState('');
+  const list = useMemo(() => rows.filter((r) => !q || String(r[cols[0].k]).includes(q.trim())).sort((a, b) => {
+    const A = a[sort.key], B = b[sort.key];
+    const c = typeof A === 'string' ? A.localeCompare(B, 'ar') : (A ?? -Infinity) - (B ?? -Infinity);
+    return sort.dir === 'asc' ? c : -c;
+  }), [rows, sort, q, cols]);
+  return (
+    <>
+      <h3 className="sub-h">{title} ({SIMPLE_NUM(rows.length)})</h3>
+      <div className="toolbar"><input placeholder="بحث بالاسم…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+      <div className="table-wrap"><table>
+        <thead><tr>{cols.map((c) => (
+          <th key={c.k} className="sortable" onClick={() => setSort((x) => ({ key: c.k, dir: x.key === c.k && x.dir === 'desc' ? 'asc' : 'desc' }))}>{c.label}{sort.key === c.k ? (sort.dir === 'desc' ? ' ▼' : ' ▲') : ''}</th>
+        ))}</tr></thead>
+        <tbody>
+          {list.slice(0, 300).map((r, i) => <tr key={i}>{cols.map((c, j) => <td key={c.k} className={j ? 'n' : ''}>{c.f ? c.f(r[c.k]) : r[c.k]}</td>)}</tr>)}
+          {!list.length && <tr><td colSpan={cols.length} className="muted center">مفيش نتائج</td></tr>}
+        </tbody>
+      </table></div>
+    </>
+  );
+}
+
+/** First Attempt (or any % KPI): what happened in the baseline month, without any comparison. */
+export function MonthSnapshotView({ snap, metric }) {
+  if (!snap || !snap.customers) return <div className="alert warn">مفيش شحنات لشهر {MONTH_AR[snap?.month]} في البيانات.</div>;
+  return (
+    <section className="card">
+      <h2>اللي حصل في {MONTH_AR[snap.month]} (شهر الأساس)</h2>
+      <p className="muted">أرقام {MONTH_AR[snap.month]} وحدها بدون مقارنة، لنفس عملاء نسبة التسليم. بتتحول لمقارنة أول ما يبقى فيه شهر بعده.</p>
+      <section className="kpis">
+        <Kpi title="عدد العملاء" value={num(snap.customers)} />
+        <Kpi title="إجمالي الشحنات" value={num(snap.total)} />
+        <Kpi title={metric.successDescription} value={num(snap.success)} />
+        <Kpi title={`${metric.label} ${MONTH_AR[snap.month]}`} value={pc1(snap.rate)} tone="brand" />
+      </section>
+      <SnapTable title="الفروع" defaultSort={{ key: 'total', dir: 'desc' }} rows={snap.branchRows}
+        cols={[{ k: 'branch', label: 'الفرع' }, { k: 'customers', label: 'عدد العملاء', f: SIMPLE_NUM }, { k: 'total', label: 'الشحنات', f: SIMPLE_NUM }, { k: 'success', label: metric.successDescription, f: SIMPLE_NUM }, { k: 'rate', label: 'النسبة', f: pc1 }]} />
+      <SnapTable title="العملاء" defaultSort={{ key: 'total', dir: 'desc' }} rows={snap.rows}
+        cols={[{ k: 'name', label: 'العميل' }, { k: 'total', label: 'الشحنات', f: SIMPLE_NUM }, { k: 'success', label: metric.successDescription, f: SIMPLE_NUM }, { k: 'rate', label: 'النسبة', f: pc1 }]} />
+    </section>
+  );
+}
+
+/** Branch SLA: average delivery days per branch in the baseline month. */
+export function SlaSnapshotView({ snap }) {
+  if (!snap || !snap.delivered) return <div className="alert warn">مفيش شحنات مسلّمة لشهر {MONTH_AR[snap?.month]} في البيانات.</div>;
+  return (
+    <section className="card">
+      <h2>Branch SLA — اللي حصل في {MONTH_AR[snap.month]} (شهر الأساس)</h2>
+      <p className="muted">متوسط مدة التسليم في {MONTH_AR[snap.month]} وحده بدون مقارنة، لنفس عملاء نسبة التسليم.</p>
+      <section className="kpis">
+        <Kpi title="عدد الفروع" value={num(snap.rows.length)} />
+        <Kpi title="عدد العملاء" value={num(snap.customers)} />
+        <Kpi title="الشحنات المسلّمة" value={num(snap.delivered)} />
+        <Kpi title={`${SLA.avgLabel} ${MONTH_AR[snap.month]}`} value={`${d2(snap.avg)} يوم`} tone="brand" />
+      </section>
+      <SnapTable title="الفروع" defaultSort={{ key: 'avg', dir: 'desc' }} rows={snap.rows}
+        cols={[{ k: 'branch', label: 'الفرع' }, { k: 'customers', label: 'عدد العملاء', f: SIMPLE_NUM }, { k: 'delivered', label: 'الشحنات المسلّمة', f: SIMPLE_NUM }, { k: 'avg', label: `${SLA.avgLabel} (يوم)`, f: d2 }]} />
+    </section>
+  );
+}
+
 /* ------------------------------------------------------------------ الفروع (SLA التسليم) */
 const d2 = (v) => (v === null || v === undefined ? '—' : v.toFixed(2));
 const imp = (v) => (v === null || v === undefined ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(3)}`); // 3 decimals so a 0.1996 improvement is not shown as 0.20 next to a lower level

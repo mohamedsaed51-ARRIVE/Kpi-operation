@@ -48,3 +48,16 @@ test('branch table for First Attempt follows the October baseline', () => {
   assert.equal(br.length, 1);
   assert.ok(Math.abs(br[0].baseline - 40) < 1e-9); // (2+10)/(10+20)
 });
+
+import { monthSnapshot, slaMonthSnapshot } from '../src/lib/quality.js';
+test('month snapshot: what happened in October (no comparison)', () => {
+  const clientsB = clients.map((c) => ({ ...c, b: { 0: c.v } }));
+  const only = new Set(['A', 'B']);
+  const s = monthSnapshot(clientsB, ['X'], base, 'October', only);
+  assert.equal(s.customers, 2); assert.equal(s.total, 30); assert.equal(s.success, 12);
+  assert.ok(Math.abs(s.rate - 40) < 1e-9);
+  assert.equal(s.branchRows[0].total, 30);
+  const sl = slaMonthSnapshot(clientsB, ['X'], 'October', only);
+  assert.equal(sl.delivered, 18); assert.ok(Math.abs(sl.avg - 52 / 18) < 1e-9);
+  assert.equal(monthSnapshot(clientsB, ['X'], base, 'October', null).customers, 3); // null = every customer
+});
