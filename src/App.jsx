@@ -259,15 +259,6 @@ export default function App() {
               </section>
             )}
 
-            {current.kind === 'overview' && (
-              <section className="group">
-                <div className="group-head">
-                  <h2>SLA المرتجعات</h2>
-                  <button className="link" onClick={() => setSection('returnsSla')}>عرض التفاصيل ←</button>
-                </div>
-                <ReturnsOverviewCards limit={returnsSlaLimit(targets)} levels={returnsLevels} demo={demo} />
-              </section>
-            )}
 
             {current.kind === 'metric' && cur && (!cur.available ? <NeedsUpdate /> : !cur.result ? <div className="alert warn">الأساس لهذا المؤشر شهر {MONTH_AR[METRICS[current.metric].baseMonth || BASELINE_MONTH]}، فاختر شهرًا مقاسًا بعده (ولنفس عملاء نسبة التسليم لازم يكون ليه 3 شهور سابقة).</div> : (
               <MetricPage key={current.id} m={cur} month={month} setMonth={setMonth} hasBranches={hasBranches} targets={targets} />
@@ -298,6 +289,15 @@ export default function App() {
               />
             )}
           </>
+        )}
+        {current.kind === 'overview' && (
+          <section className="group">
+            <div className="group-head">
+              <h2>SLA المرتجعات</h2>
+              <button className="link" onClick={() => setSection('returnsSla')}>عرض التفاصيل ←</button>
+            </div>
+            <ReturnsOverviewCards limit={returnsSlaLimit(targets)} levels={returnsLevels} demo={demo} />
+          </section>
         )}
         <footer>ARRIVE — KPI Operation · المصدر: Google Sheets</footer>
       </main>

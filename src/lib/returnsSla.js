@@ -102,7 +102,7 @@ export function returnsSlaLimit(targets) {
 
 // ---------------------------------------------------------------------------------------------------------------
 // Comparison like the other KPIs, but WITHOUT the customers split: all return rows of the sheet (after the page filters).
-//   month = calendar month of «تاريخ تقفيل المرتجع»; baseline = pooled average age of the 3 previous months;
+//   month = calendar month of «تاريخ تقفيل المرتجع»; baseline = pooled average age of the 3 previous months (only the ones that have data — even a single month);
 //   improvement (days) = baseline − current (a shorter return age is better) → level from the thresholds saved in Settings.
 // ---------------------------------------------------------------------------------------------------------------
 export const monthKeyOf = (r) => (r.ret ? r.ret.slice(0, 7) : null); // 'YYYY-MM'
@@ -152,12 +152,13 @@ export function evaluateReturnsMonth(rows, month, ageFn, levels, levelFn) {
   const group = build(all);
   const branches = [];
   for (const [branch, cells] of br) { const r = build(cells); if (r) branches.push({ branch, ...r }); }
-  return { month, prev, group, branches, missingPrev: prev.filter((k) => !all.has(k)) };
+  const usedPrev = prev.filter((k) => all.has(k));
+  return { month, prev, usedPrev, group, branches, missingPrev: prev.filter((k) => !all.has(k)) };
 }
 
-/** Months that can be compared (they have aged returns and so do the 3 previous months), plus every month present. */
+/** Months that can be compared: they have aged returns and at least ONE of the 3 previous months has too (the baseline then uses the months that exist). */
 export function comparableMonths(rows, ageFn) {
   const { all } = monthSums(rows, ageFn);
   const present = [...all.keys()].sort();
-  return { present, comparable: present.filter((k) => previousMonthKeys(k).every((p) => all.has(p))) };
+  return { present, comparable: present.filter((k) => previousMonthKeys(k).some((p) => all.has(p))) };
 }

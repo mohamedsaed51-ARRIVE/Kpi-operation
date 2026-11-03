@@ -123,7 +123,7 @@ export function ReturnsOverviewCards({ limit, levels, demo }) {
     const g = ev.group;
     return (
       <section className="kpis">
-        <Kpi title="متوسط عمر المرتجع — آخر 3 شهور" value={`${f1(g.baseline)} يوم`} sub={ev.prev.map(monthLabel).join(' + ')} />
+        <Kpi title="متوسط عمر المرتجع — آخر 3 شهور" value={`${f1(g.baseline)} يوم`} sub={`${ev.usedPrev.map(monthLabel).join(' + ')}${ev.usedPrev.length < 3 ? ` (المتاح ${ev.usedPrev.length} من 3 شهور)` : ''} · ${fmt(g.nBase)} مرتجع`} />
         <Kpi title={`متوسط عمر المرتجع — ${monthLabel(ev.month)}`} value={`${f1(g.current)} يوم`} tone="brand" sub={`${fmt(g.nCur)} مرتجع`} />
         <Kpi title="التحسن" value={`${g.improvement > 0 ? '+' : ''}${g.improvement.toFixed(3)} يوم`} tone={g.improvement >= 0 ? 'good' : 'bad'} sub="الموجب = أسرع من متوسط الـ3 شهور" />
         <div className={`kpi verdict ${g.level ? `lv-${g.level.key}` : ''}`}>
@@ -137,7 +137,7 @@ export function ReturnsOverviewCards({ limit, levels, demo }) {
   return (
     <>
       <div className="alert warn">
-        مفيش شهر معاه 3 شهور سابقة في شيت Sla RTO (المتاح: {months.present.length ? months.present.map(monthLabel).join('، ') : 'لا يوجد'})، فبتظهر أرقام الشيت الحالية من غير مقارنة.
+        المقارنة محتاجة شهرين على الأقل في شيت Sla RTO (المتاح: {months.present.length ? months.present.map(monthLabel).join('، ') : 'لا يوجد'})، فبتظهر أرقام الشيت الحالية من غير مقارنة.
       </div>
       <section className="kpis">
         <Kpi title="عدد المرتجعات" value={fmt(T.rows)} sub={`${fmt(new Set(rows.map((r) => r.wb)).size)} بوليصة مميزة`} />
@@ -250,14 +250,14 @@ export default function ReturnsSlaPage({ limit, demo, levels }) {
         <h2>مقارنة SLA المرتجعات — آخر 3 شهور مقابل الشهر المختار</h2>
         <p className="muted">
           من غير تقسيم على العملاء: كل صفوف الشيت (بعد الفلاتر ما عدا التاريخ). الشهر = شهر «تاريخ تقفيل المرتجع».
-          التحسن = متوسط عمر المرتجع في الـ3 شهور السابقة − متوسط الشهر المختار (النقص تحسّن). المقاييس من الإعدادات:
+          التحسن = متوسط عمر المرتجع في آخر 3 شهور قبله (المتاح منها حتى لو شهر واحد) − متوسط الشهر المختار (النقص تحسّن). المقاييس من الإعدادات:
           {' '}{levels.slice(0, 3).reverse().map((l) => `${l.label} ≥ ${l.minDelta}`).join(' · ')} يوم أسرع.
         </p>
         {!months.comparable.length ? (
           <div className="alert warn">
-            مفيش شهر معاه 3 شهور سابقة في البيانات الحالية.
+            مفيش شهر معاه شهر سابق واحد على الأقل في البيانات الحالية.
             {' '}الشهور المتاحة (بتاريخ تقفيل المرتجع): {months.present.length ? months.present.map(monthLabel).join('، ') : 'لا يوجد'}.
-            {' '}المقارنة هتشتغل أول ما تتوفر 3 شهور قبل الشهر المطلوب في شيت Sla RTO.
+            {' '}المقارنة بتحتاج شهرين على الأقل (الشهر المقاس وشهر قبله) في شيت Sla RTO.
           </div>
         ) : (
           <>
@@ -271,7 +271,7 @@ export default function ReturnsSlaPage({ limit, demo, levels }) {
             {compare?.group ? (
               <>
                 <section className="kpis">
-                  <Kpi title="متوسط عمر المرتجع — آخر 3 شهور" value={`${f1(compare.group.baseline)} يوم`} sub={`${compare.prev.map(monthLabel).join(' + ')} · ${fmt(compare.group.nBase)} مرتجع`} />
+                  <Kpi title="متوسط عمر المرتجع — آخر 3 شهور" value={`${f1(compare.group.baseline)} يوم`} sub={`${compare.usedPrev.map(monthLabel).join(' + ')}${compare.usedPrev.length < 3 ? ` (المتاح ${compare.usedPrev.length} من 3 شهور)` : ''} · ${fmt(compare.group.nBase)} مرتجع`} />
                   <Kpi title={`متوسط عمر المرتجع — ${monthLabel(compare.month)}`} value={`${f1(compare.group.current)} يوم`} tone="brand" sub={`${fmt(compare.group.nCur)} مرتجع`} />
                   <Kpi title="التحسن" value={`${compare.group.improvement > 0 ? '+' : ''}${compare.group.improvement.toFixed(3)} يوم`} tone={compare.group.improvement >= 0 ? 'good' : 'bad'} sub="الموجب = أسرع من متوسط الـ3 شهور" />
                   <div className={`kpi verdict ${compare.group.level ? `lv-${compare.group.level.key}` : ''}`}>
@@ -282,7 +282,7 @@ export default function ReturnsSlaPage({ limit, demo, levels }) {
                 </section>
                 <h3 className="sub-h">الفروع — {monthLabel(compare.month)} ({fmt(compare.branches.length)} فرع)</h3>
                 <div className="table-wrap"><table>
-                  <thead><tr><th>الفرع</th><th>متوسط الـ3 شهور (يوم)</th><th>{monthLabel(compare.month)} (يوم)</th><th>التحسن (يوم)</th><th>التقييم</th><th>مرتجعات الشهر</th></tr></thead>
+                  <thead><tr><th>الفرع</th><th>متوسط آخر 3 شهور (يوم)</th><th>{monthLabel(compare.month)} (يوم)</th><th>التحسن (يوم)</th><th>التقييم</th><th>مرتجعات الشهر</th></tr></thead>
                   <tbody>
                     {[...compare.branches].sort((a, b) => b.improvement - a.improvement).map((b) => (
                       <tr key={b.branch}>
@@ -290,7 +290,7 @@ export default function ReturnsSlaPage({ limit, demo, levels }) {
                         <td className="n">{b.improvement > 0 ? '+' : ''}{b.improvement.toFixed(3)}</td><td><Badge level={b.level} /></td><td className="n">{fmt(b.nCur)}</td>
                       </tr>
                     ))}
-                    {!compare.branches.length && <tr><td colSpan="6" className="muted center">مفيش فرع ليه مرتجعات في الـ3 شهور السابقة والشهر المقاس</td></tr>}
+                    {!compare.branches.length && <tr><td colSpan="6" className="muted center">مفيش فرع ليه مرتجعات في الشهور السابقة والشهر المقاس</td></tr>}
                   </tbody>
                 </table></div>
               </>

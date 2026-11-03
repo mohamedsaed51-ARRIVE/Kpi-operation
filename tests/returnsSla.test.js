@@ -63,7 +63,7 @@ test('return SLA comparison: 3 previous months vs the chosen month (no customer 
   const rs = [...mk('2026-01', [4, 4]), ...mk('2026-02', [4, 2]), ...mk('2026-03', [3, 3]), ...mk('2026-04', [2, 2], 'X'), ...mk('2026-04', [4, 4], 'Y')];
   const age = (r) => r.ageS;
   const { comparable } = comparableMonths(rs, age);
-  assert.deepEqual(comparable, ['2026-04']);
+  assert.deepEqual(comparable, ['2026-02', '2026-03', '2026-04']); // each has at least one earlier month with data
   const ev = evaluateReturnsMonth(rs, '2026-04', age, makeLevels({ acceptable: 0.1, required: 0.2, excellent: 0.3 }), levelFor);
   // baseline = (8+6+6)/6 = 3.333…, April = (4+8)/4 = 3 → improvement 0.333 → ممتاز
   assert.ok(Math.abs(ev.group.baseline - 20 / 6) < 1e-9);
@@ -72,4 +72,16 @@ test('return SLA comparison: 3 previous months vs the chosen month (no customer 
   assert.equal(ev.branches.length, 1); // Y has no returns in the baseline months → not comparable
   assert.equal(ev.branches[0].branch, 'X');
   assert.ok(Math.abs(ev.branches[0].improvement - (20 / 6 - 2)) < 1e-9);
+});
+
+test('partial baseline: a single previous month is enough (average of the months that exist)', () => {
+  const mk = (ym, ages) => ages.map((a) => ({ ret: `${ym}-10`, ageS: a, ageC: a, noDate: false, branch: 'X' }));
+  const rs = [...mk('2026-09', [4, 4, 4, 4]), ...mk('2026-10', [3, 3])];
+  const age = (r) => r.ageS;
+  assert.deepEqual(comparableMonths(rs, age).comparable, ['2026-10']);
+  const ev = evaluateReturnsMonth(rs, '2026-10', age, makeLevels({ acceptable: 0.1, required: 0.2, excellent: 0.3 }), levelFor);
+  assert.deepEqual(ev.usedPrev, ['2026-09']);
+  assert.equal(ev.missingPrev.length, 2);
+  assert.ok(Math.abs(ev.group.baseline - 4) < 1e-9 && Math.abs(ev.group.current - 3) < 1e-9);
+  assert.equal(ev.group.level.key, 'excellent');
 });
