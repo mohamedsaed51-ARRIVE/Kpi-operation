@@ -43,6 +43,12 @@ var KPI_TARGET_METRICS = ["delivery", "firstAttempt", "sla"];
 // Largest accepted value per KPI: percentages go up to 100, the SLA target is a number of days.
 var KPI_TARGET_MAX = { delivery: 100, firstAttempt: 100, sla: 60 };
 
+// Customer-size tiers (name, minimum shipments, weight %). Settings only — not used in any calculation yet.
+var KPI_TIERS_PROPERTY_KEY = "KPI_TIERS_JSON";
+var KPI_TIERS_MAX_ROWS = 10;
+var KPI_TIERS_MAX_NAME = 40;
+var KPI_TIERS_MAX_MIN_SHIPMENTS = 10000000;
+
 function doGet(e) {
   var params = (e && e.parameter) ? e.parameter : {};
   var action = params.action || "ping";
@@ -51,6 +57,8 @@ function doGet(e) {
     if (action === "clientMonthly") result = getClientMonthlyPayload(params);
     else if (action === "getKpiTargets") result = getKpiTargetsPayload();
     else if (action === "saveKpiTargets") result = saveKpiTargetsPayload(params);
+    else if (action === "getKpiTiers") result = getKpiTiersPayload();
+    else if (action === "saveKpiTiers") result = saveKpiTiersPayload(params);
     else if (action === "ping") result = { success: true, service: "kpi-operation-backend", time: new Date().toISOString() };
     else result = { success: false, error: "Unknown action: " + action };
   } catch (err) {
@@ -209,6 +217,47 @@ function saveKpiTargetsPayload(params) {
     });
     PropertiesService.getScriptProperties().setProperty(KPI_TARGETS_PROPERTY_KEY, JSON.stringify(clean));
     return { success: true, targets: clean };
+  } catch (e) {
+    return { success: false, error: String(e && e.message ? e.message : e) };
+  }
+}
+
+// ---------- customer tiers ----------
+// [ { name: "<tier>", minShipments: <integer|null>, weight: <0-100|null> } ] — blank numbers are stored as null.
+function cleanTiers_(arr) {
+  var out = [], seen = {};
+  if (!Array.isArray(arr)) return out;
+  for (var i = 0; i < arr.length && out.length < KPI_TIERS_MAX_ROWS; i++) {
+    var t = arr[i] || {};
+    var name = normText_(t.name).slice(0, KPI_TIERS_MAX_NAME);
+    if (!name || seen[name]) continue;
+    seen[name] = true;
+    var mn = null, w = null;
+    if (t.minShipments !== null && t.minShipments !== undefined && t.minShipments !== "") {
+      var a = Number(t.minShipments);
+      if (isFinite(a) && a >= 0 && a <= KPI_TIERS_MAX_MIN_SHIPMENTS && Math.floor(a) === a) mn = a;
+    }
+    if (t.weight !== null && t.weight !== undefined && t.weight !== "") {
+      var b = Number(t.weight);
+      if (isFinite(b) && b >= 0 && b <= 100) w = b;
+    }
+    out.push({ name: name, minShipments: mn, weight: w });
+  }
+  return out;
+}
+function readTiers_() {
+  try {
+    var raw = PropertiesService.getScriptProperties().getProperty(KPI_TIERS_PROPERTY_KEY);
+    return cleanTiers_(raw ? JSON.parse(raw) : []);
+  } catch (e) { return []; }
+}
+function getKpiTiersPayload() { return { success: true, tiers: readTiers_() }; }
+function saveKpiTiersPayload(params) {
+  try {
+    var parsed = (params && params.tiers) ? JSON.parse(params.tiers) : [];
+    var clean = cleanTiers_(parsed);
+    PropertiesService.getScriptProperties().setProperty(KPI_TIERS_PROPERTY_KEY, JSON.stringify(clean));
+    return { success: true, tiers: clean };
   } catch (e) {
     return { success: false, error: String(e && e.message ? e.message : e) };
   }

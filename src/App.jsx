@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { fetchClientMonthly, fetchTargets, saveTargets } from './api.js';
+import { fetchClientMonthly, fetchTargets, saveTargets, fetchTiers, saveTiers } from './api.js';
 import { API_URL } from './config.js';
 import { demoData, demoTargets } from './demo.js';
 import { managementSummary } from './lib/summary.js';
@@ -110,6 +110,8 @@ export default function App() {
   const [data, setData] = useState(null);
   const [targets, setTargets] = useState(null);
   const [targetsError, setTargetsError] = useState('');
+  const [tiers, setTiers] = useState(null);
+  const [tiersError, setTiersError] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState(null);
@@ -119,7 +121,7 @@ export default function App() {
   const [section, setSection] = useState('overview');
 
   const load = () => {
-    setLoading(true); setError(''); setTargetsError('');
+    setLoading(true); setError(''); setTargetsError(''); setTiersError('');
     (demo ? Promise.resolve(demoData()) : fetchClientMonthly())
       .then((d) => { setData(d); setUpdatedAt(new Date()); })
       .catch((e) => setError(e.message || String(e)))
@@ -127,10 +129,14 @@ export default function App() {
     (demo ? Promise.resolve(demoTargets()) : fetchTargets())
       .then(setTargets)
       .catch((e) => setTargetsError(e.message || String(e)));
+    (demo ? Promise.resolve([]) : fetchTiers())
+      .then(setTiers)
+      .catch((e) => setTiersError(e.message || String(e)));
   };
   useEffect(load, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onSaveTargets = async (t) => { const saved = demo ? t : await saveTargets(t); setTargets(saved); };
+  const onSaveTiers = async (t) => { const saved = demo ? t : await saveTiers(t); setTiers(saved); };
 
   const opts = useMemo(() => ({ method, minShipments }), [method, minShipments]);
   const hasBranches = !!(data && Array.isArray(data.branches) && data.clients.some((c) => c.b));
@@ -285,6 +291,9 @@ export default function App() {
                 branches={data.branches}
                 targets={targets}
                 onSave={onSaveTargets}
+                tiers={tiers}
+                onSaveTiers={onSaveTiers}
+                tiersError={tiersError}
                 unavailableReason={targets === null ? (targetsError ? `تعذر تحميل التارجت: ${targetsError}` : 'جاري تحميل التارجت…') : (hasBranches ? '' : 'تفصيل الفروع مش موجود في رد السيرفر.')}
               />
             )}

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { MONTH_AR, METRICS } from './lib/quality.js';
 import { cleanTargets, invalidCells, meetsMaxTarget, normBranch, targetFor } from './lib/targets.js';
+import { MAX_TIERS, cleanTiers, tierProblems, tiersToDraft, weightsTotal } from './lib/tiers.js';
 import { apiChecks, monthCoverage, namesWithEntities, similarNames } from './lib/dataQuality.js';
 import { SLA, evaluateSlaBranches, thresholdsTextSla } from './lib/sla.js';
 import { RETURNS_SLA_KEY } from './lib/returnsSla.js';
@@ -119,7 +120,7 @@ const SETTINGS_METRICS = [
   { id: 'sla', label: SLA.label, unit: 'يوم', max: 60, step: 0.01, example: 'مثلاً 2' },
 ];
 
-export function SettingsPage({ branches, targets, onSave, unavailableReason }) {
+export function SettingsPage({ branches, targets, onSave, unavailableReason, tiers, onSaveTiers, tiersError }) {
   const toDraft = (t) => Object.fromEntries(SETTINGS_METRICS.map((m) => [m.id, Object.fromEntries(Object.entries(t?.[m.id] || {}).map(([b, v]) => [b, String(v)]))]));
   const [draft, setDraft] = useState(() => toDraft(targets));
   const [bulk, setBulk] = useState({ delivery: '', firstAttempt: '', sla: '' });
@@ -241,7 +242,66 @@ export function SettingsPage({ branches, targets, onSave, unavailableReason }) {
         {dirty && <span className="muted" style={{ marginInlineStart: 12 }}>فيه تغييرات لم تُحفظ</span>}
       </div>
     </section>
+
+    <TiersSection tiers={tiers} onSave={onSaveTiers} error={tiersError} />
     </>
+  );
+}
+
+/* تصنيف العملاء (الحجم) ونسبة كل تصنيف — إعداد فقط، لا يدخل في أي حساب حاليًا */
+function TiersSection({ tiers, onSave, error }) {
+  const [draft, setDraft] = useState(() => tiersToDraft(tiers));
+  const [state, setState] = useState({ saving: false, message: '', error: '' });
+  useEffect(() => { setDraft(tiersToDraft(tiers)); }, [tiers]);
+  const { errors, warnings } = useMemo(() => tierProblems(draft), [draft]);
+  const dirty = JSON.stringify(cleanTiers(draft)) !== JSON.stringify(cleanTiers(tiersToDraft(tiers)));
+  const total = weightsTotal(draft);
+  const setCell = (i, k, v) => setDraft((d) => d.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
+  const save = async () => {
+    setState({ saving: true, message: '', error: '' });
+    try { await onSave(cleanTiers(draft)); setState({ saving: false, message: 'تم حفظ جدول التصنيف على السيرفر.', error: '' }); }
+    catch (e) { setState({ saving: false, message: '', error: e.message || String(e) }); }
+  };
+  if (tiers === null) return <section className="card"><h2>تصنيف العملاء ونسبة كل تصنيف</h2><div className="alert warn">{error ? `تعذر تحميل جدول التصنيف: ${error}. لو الباك إند قديم انشر آخر نسخة من backend/Code.gs.` : 'جاري تحميل جدول التصنيف…'}</div></section>;
+  return (
+    <section className="card">
+      <h2>تصنيف العملاء ونسبة كل تصنيف</h2>
+      <p className="muted">
+        جدول تحدده الإدارة لتقسيم العملاء حسب حجم الشحنات ووزن كل تصنيف في المؤشر (حتى لا يتساوى العميل الكبير بالصغير أو الجديد).
+        <b> إعداد فقط: القيم هنا بتتحفظ ولكن لا تدخل في أي حساب أو تقييم حاليًا.</b> الخانات الفاضية مسموحة وتقدر تملأها بعدين.
+        الحد الأدنى = أقل عدد شحنات في الشهر ليدخل العميل التصنيف (عدد صحيح). النسبة = وزن التصنيف (٪)، ومجموع النسب المفروض 100٪.
+      </p>
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>التصنيف</th><th>الحد الأدنى للشحنات في الشهر</th><th>النسبة (٪)</th><th></th></tr></thead>
+          <tbody>
+            {draft.map((r, i) => (
+              <tr key={i}>
+                <td><input type="text" maxLength="40" value={r.name} onChange={(e) => setCell(i, 'name', e.target.value)} placeholder="اسم التصنيف" /></td>
+                <td><input type="number" min="0" step="1" value={r.minShipments} onChange={(e) => setCell(i, 'minShipments', e.target.value)} placeholder="غير محدد" /></td>
+                <td><input type="number" min="0" max="100" step="0.1" value={r.weight} onChange={(e) => setCell(i, 'weight', e.target.value)} placeholder="غير محدد" /></td>
+                <td><button className="btn ghost" style={{ marginTop: 0 }} onClick={() => setDraft((d) => d.filter((_, j) => j !== i))}>حذف</button></td>
+              </tr>
+            ))}
+            <tr>
+              <td><b>المجموع</b></td><td></td>
+              <td><b>{total}٪</b></td><td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <button className="btn ghost" style={{ marginTop: 0 }} disabled={draft.length >= MAX_TIERS} onClick={() => setDraft((d) => [...d, { name: '', minShipments: '', weight: '' }])}>+ إضافة تصنيف</button>
+      </div>
+      {errors.length > 0 && <div className="alert err" style={{ marginTop: 12 }}>{errors.map((m) => <div key={m}>{m}</div>)}</div>}
+      {warnings.length > 0 && <div className="alert warn" style={{ marginTop: 12 }}>{warnings.map((m) => <div key={m}>{m}</div>)}</div>}
+      {state.error && <div className="alert err" style={{ marginTop: 12 }}><b>تعذر الحفظ.</b> {state.error}</div>}
+      {state.message && <div className="alert" style={{ marginTop: 12 }}>{state.message}</div>}
+      <div style={{ marginTop: 14 }}>
+        <button className="btn" onClick={save} disabled={state.saving || !dirty || errors.length > 0}>{state.saving ? 'جاري الحفظ…' : 'حفظ جدول التصنيف'}</button>
+        {dirty && <span className="muted" style={{ marginInlineStart: 12 }}>فيه تغييرات لم تُحفظ</span>}
+      </div>
+    </section>
   );
 }
 

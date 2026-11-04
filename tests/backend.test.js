@@ -120,3 +120,14 @@ test('doGet routes actions and answers ping', () => {
   assert.equal(JSON.parse(sb.doGet({ parameter: { action: 'ping' } }).text).success, true);
   assert.equal(JSON.parse(sb.doGet({ parameter: { action: 'nope' } }).text).success, false);
 });
+
+test('tiers: validated, stored in this project, blank numbers kept as null, bad JSON rejected', () => {
+  const { sb, store } = load();
+  assert.deepEqual(JSON.parse(JSON.stringify(sb.getKpiTiersPayload().tiers)), []);
+  const s = sb.saveKpiTiersPayload({ tiers: JSON.stringify([{ name: ' كبار ', minShipments: 500, weight: 40 }, { name: 'كبار', weight: 5 }, { name: 'صغار', minShipments: '', weight: '' }, { name: 'x', minShipments: 1.5, weight: 101 }, { name: '' }]) });
+  assert.equal(s.success, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(s.tiers)), [{ name: 'كبار', minShipments: 500, weight: 40 }, { name: 'صغار', minShipments: null, weight: null }, { name: 'x', minShipments: null, weight: null }]);
+  assert.ok(store.KPI_TIERS_JSON);
+  assert.equal(sb.saveKpiTiersPayload({ tiers: '{bad' }).success, false);
+  assert.equal(JSON.parse(JSON.stringify(sb.getKpiTiersPayload().tiers)).length, 3); // unchanged after a failed save
+});

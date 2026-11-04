@@ -19,6 +19,8 @@ export async function fetchClientMonthly() {
 }
 export const fetchTargets = () => call({ action: 'getKpiTargets' }).then((d) => d.targets);
 export const saveTargets = (targets) => call({ action: 'saveKpiTargets', targets: JSON.stringify(targets) }).then((d) => d.targets);
+export const fetchTiers = () => call({ action: 'getKpiTiers' }).then((d) => d.tiers);
+export const saveTiers = (tiers) => call({ action: 'saveKpiTiers', tiers: JSON.stringify(tiers) }).then((d) => d.tiers);
 
 // ---- SLA المرتجعات (separate source: the «Sla RTO» sheet) ----
 import { RETURNS_SLA_URL } from './config.js';
