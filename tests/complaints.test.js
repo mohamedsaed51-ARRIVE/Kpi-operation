@@ -42,3 +42,10 @@ test('countBy / month filter / open status', () => {
 test('csv escapes quotes and has BOM', () => {
   assert.equal(csvText(['a'], [['x"y']]), '﻿"a"\r\n"x""y"');
 });
+
+import { latestMonth } from '../src/lib/complaints.js';
+test('latestMonth uses the newest date, not calendar order', () => {
+  assert.equal(latestMonth(rows), 'نوفمبر');
+  assert.equal(latestMonth([{ month: 'ديسمبر', date: '2025-12-01' }, { month: 'يناير', date: '2026-01-02' }]), 'يناير');
+  assert.equal(latestMonth([]), null);
+});
