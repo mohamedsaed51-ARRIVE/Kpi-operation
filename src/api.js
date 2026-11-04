@@ -45,3 +45,16 @@ export function fetchReturnsSnapshot() {
     document.head.appendChild(s);
   });
 }
+
+// ---- الشكاوى والتعويضات (مصدر منفصل: Web App داش بورد الشكاوى، قراءة فقط) ----
+import { COMPLAINTS_API_URL } from './config.js';
+
+export async function fetchComplaintsRaw() {
+  const res = await fetch(COMPLAINTS_API_URL, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`فشل الاتصال بسيرفر الشكاوى (HTTP ${res.status})`);
+  let j;
+  try { j = JSON.parse((await res.text()).replace(/^﻿/, '').trim()); } catch { throw new Error('رد سيرفر الشكاوى مش JSON — اتأكد إن النشر «Anyone».'); }
+  const rows = Array.isArray(j) ? j : (j && Array.isArray(j.data) ? j.data : null);
+  if (!rows) throw new Error('شكل رد سيرفر الشكاوى غير متوقع');
+  return rows;
+}
