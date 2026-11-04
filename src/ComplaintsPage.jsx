@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { fetchComplaintsRaw } from './api.js';
 import { Kpi, num } from './components.jsx';
-import { ALL_MONTHS, bearerSummary, countBy, csvText, decodeComplaints, filterMonth, isOpen, monthsOf, sumAmount } from './lib/complaints.js';
+import { ALL_MONTHS, bearerSummary, countBy, csvText, decodeComplaints, filterMonth, isOpen, latestMonth, monthsOf, sumAmount } from './lib/complaints.js';
 
 const DETAIL_LIMIT = 300;
 const GROUPS = [['type', 'النوع'], ['branch', 'الفرع'], ['classification', 'التصنيف'], ['status', 'الحالة']];
@@ -117,5 +117,26 @@ export default function ComplaintsPage({ demo }) {
         </>
       )}
     </>
+  );
+}
+
+/** كروت «المؤشرات الرئيسية»: الشكاوى والتعويضات لآخر شهر + إجمالي كل الشهور. */
+export function ComplaintsOverviewCards() {
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => { fetchComplaintsRaw().then((r) => setRows(decodeComplaints(r))).catch((e) => setError(e.message || String(e))); }, []);
+  const month = useMemo(() => (rows ? latestMonth(rows) : null), [rows]);
+  const cur = useMemo(() => (rows ? filterMonth(rows, month) : []), [rows, month]);
+  const top = useMemo(() => bearerSummary(cur).find((o) => o.amount > 0), [cur]);
+  if (error) return <div className="alert err"><b>تعذر تحميل بيانات الشكاوى.</b> {error}</div>;
+  if (!rows) return <div className="alert">جاري تحميل بيانات الشكاوى…</div>;
+  if (!rows.length || !month) return <div className="alert warn">مفيش شكاوى متاحة.</div>;
+  const sum = sumAmount(cur);
+  return (
+    <section className="kpis">
+      <Kpi title={`عدد الشكاوى — ${month}`} value={num(cur.length)} tone="brand" sub={`${num(cur.filter(isOpen).length)} مفتوحة · إجمالي كل الشهور ${num(rows.length)}`} />
+      <Kpi title={`إجمالي التعويض (ج.م) — ${month}`} value={num(sum)} sub={`${num(cur.filter((r) => (r.amount || 0) > 0).length)} حالة بتعويض · إجمالي كل الشهور ${num(sumAmount(rows))}`} />
+      <Kpi title={`أعلى جهة تحميلًا — ${month}`} value={top ? top.bearer : '—'} sub={top ? `${num(top.amount)} ج.م · ${pctOf(top.amount, sum)} من تعويضات الشهر` : 'لا توجد تعويضات'} />
+    </section>
   );
 }

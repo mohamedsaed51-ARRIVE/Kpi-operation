@@ -10,7 +10,7 @@ import {
 import { BranchesPage, DataQualityPage, MonthSnapshotCards, MonthSnapshotView, SettingsPage, SlaOverviewCards, SlaSnapshotCards, SlaSnapshotView } from './pages.jsx';
 import { SLA } from './lib/sla.js';
 import { levelsFor, withLevels } from './lib/levels.js';
-import ComplaintsPage from './ComplaintsPage.jsx';
+import ComplaintsPage, { ComplaintsOverviewCards } from './ComplaintsPage.jsx';
 import ReturnsSlaPage, { ReturnsOverviewCards } from './ReturnsSlaPage.jsx';
 import { returnsSlaLimit } from './lib/returnsSla.js';
 
@@ -302,6 +302,15 @@ export default function App() {
               />
             )}
           </>
+        )}
+        {current.kind === 'overview' && !demo && (
+          <section className="group">
+            <div className="group-head">
+              <h2>الشكاوى والتعويضات</h2>
+              <button className="link" onClick={() => setSection('complaints')}>عرض التفاصيل ←</button>
+            </div>
+            <ComplaintsOverviewCards />
+          </section>
         )}
         {current.kind === 'overview' && (
           <section className="group">

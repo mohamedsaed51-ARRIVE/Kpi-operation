@@ -77,3 +77,10 @@ export function csvText(headers, lines) {
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   return `﻿${[headers.map(esc).join(','), ...lines.map((l) => l.map(esc).join(','))].join('\r\n')}`;
 }
+
+/** شهر أحدث شكوى (بتاريخ الإضافة) — يعتمد على التاريخ الكامل مش ترتيب الشهر في السنة. */
+export function latestMonth(rows) {
+  let best = null;
+  rows.forEach((r) => { if (r.month && r.date && (!best || r.date > best.date)) best = r; });
+  return best ? best.month : null;
+}
