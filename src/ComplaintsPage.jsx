@@ -121,18 +121,21 @@ export default function ComplaintsPage({ demo }) {
 }
 
 /** كارت «المؤشرات الرئيسية»: مؤشر الشكاوى + مؤشر التعويضات (+ المفقود والتالف) لآخر شهر مع إجمالي كل الشهور. */
-export function ComplaintsOverviewCards() {
+export function ComplaintsOverviewCards({ months: sel }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState('');
   useEffect(() => { fetchComplaintsRaw().then((r) => setRows(decodeComplaints(r))).catch((e) => setError(e.message || String(e))); }, []);
-  const month = useMemo(() => (rows ? latestMonth(rows) : null), [rows]);
-  const cur = useMemo(() => (rows ? filterMonth(rows, month) : []), [rows, month]);
+  // الأشهر المختارة من فلتر «المؤشرات الرئيسية»؛ لو مفيش اختيار يرجع لآخر شهر.
+  const selKey = (sel || []).join('|');
+  const chosen = useMemo(() => (rows ? (sel && sel.length ? sel : [latestMonth(rows)].filter(Boolean)) : []), [rows, selKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const month = chosen.join('، ');
+  const cur = useMemo(() => (rows ? rows.filter((r) => chosen.includes(r.month)) : []), [rows, chosen]);
   const st = useMemo(() => overviewStats(cur), [cur]);
   const all = useMemo(() => (rows ? overviewStats(rows) : null), [rows]);
   const top = useMemo(() => bearerSummary(cur).find((o) => o.amount > 0), [cur]);
   if (error) return <div className="alert err"><b>تعذر تحميل بيانات الشكاوى.</b> {error}</div>;
   if (!rows) return <div className="alert">جاري تحميل بيانات الشكاوى…</div>;
-  if (!rows.length || !month) return <div className="alert warn">مفيش شكاوى متاحة.</div>;
+  if (!rows.length || !chosen.length) return <div className="alert warn">مفيش شكاوى متاحة.</div>;
   const f1 = (v) => (v === null ? '—' : `${(Math.round(v * 10) / 10).toFixed(1)}`);
   const sla = (o) => (o.pct === null ? '—' : `${Math.round(o.pct)}%`);
   const accTone = st.acceptRate === null ? undefined : (st.acceptRate >= ACCEPT_TARGET_PCT ? 'good' : 'bad');

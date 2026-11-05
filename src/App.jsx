@@ -118,6 +118,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState(null);
   const [month, setMonth] = useState('');
+  const [monthsSel, setMonthsSel] = useState([]); // «المؤشرات الرئيسية»: أكثر من شهر مقاس
   const [method, setMethod] = useState('pooled');
   const [minShipments, setMin] = useState(1);
   const [section, setSection] = useState('overview');
@@ -140,7 +141,9 @@ export default function App() {
   const onSaveTargets = async (t) => { const saved = demo ? t : await saveTargets(t); setTargets(saved); };
   const onSaveTiers = async (t) => { const saved = demo ? t : await saveTiers(t); setTiers(saved); };
 
-  const opts = useMemo(() => ({ method, minShipments }), [method, minShipments]);
+  const isOverview = section === 'overview';
+  // «المؤشرات الرئيسية» دايمًا بالإعداد الافتراضي (مجمّع، أقل عدد شحنات = 1)؛ الإعدادين دول بيأثروا في صفحات المؤشرات التفصيلية بس.
+  const opts = useMemo(() => (isOverview ? { method: 'pooled', minShipments: 1 } : { method, minShipments }), [isOverview, method, minShipments]);
   const hasBranches = !!(data && Array.isArray(data.branches) && data.clients.some((c) => c.b));
   const dLevels = JSON.stringify(levelsFor(targets, 'delivery').map((l) => l.minDelta));
   const fLevels = JSON.stringify(levelsFor(targets, 'firstAttempt').map((l) => l.minDelta));
@@ -170,6 +173,25 @@ export default function App() {
   useEffect(() => {
     if (data && months.length && !months.some((t) => t.month === month)) setMonth(months[months.length - 1].month);
   }, [data, months, month]);
+  useEffect(() => {
+    if (!data || !months.length) return;
+    const valid = monthsSel.filter((m) => months.some((t) => t.month === m));
+    if (valid.length !== monthsSel.length || !valid.length) setMonthsSel(valid.length ? valid : [months[months.length - 1].month]);
+  }, [data, months, monthsSel]);
+  const toggleMonth = (m) => setMonthsSel((cur) => (cur.includes(m) ? (cur.length > 1 ? cur.filter((x) => x !== m) : cur) : [...cur, m]));
+  // نتائج كل شهر مختار في «المؤشرات الرئيسية» (نفس محرك الصفحات التفصيلية).
+  const perMonth = useMemo(() => {
+    if (!data || !isOverview) return [];
+    const ok = (r) => (r && !r.error ? r : null);
+    const firstAvail = firstMetric.available(data.clients);
+    const eligibleFor = (mm) => { const r = evaluateMonth(data.clients, mm, { ...opts, metric: deliveryMetric }); return new Set(r.error ? [] : r.rows.map((x) => x.name)); };
+    return [...monthsSel].sort((a, b) => MONTH_ORDER_IDX(a) - MONTH_ORDER_IDX(b)).map((m) => {
+      const delivery = ok(evaluateMonth(data.clients, m, { ...opts, metric: deliveryMetric }));
+      const firstAttempt = firstAvail ? ok(evaluateMonth(data.clients, m, { ...opts, metric: firstMetric, eligibleFor })) : null;
+      const sla = delivery && MONTH_ORDER_IDX(delivery.month) > MONTH_ORDER_IDX(BASELINE_MONTH) ? { result: { ...delivery, prev: [BASELINE_MONTH], method: 'pooled' } } : { result: null };
+      return { month: m, delivery, firstAttempt, firstAvail, sla };
+    });
+  }, [data, isOverview, monthsSel, opts, deliveryMetric, firstMetric]);
 
   const current = SECTIONS.find((x) => x.id === section);
   const cur = current.metric ? results[current.metric] : null;
@@ -207,7 +229,7 @@ export default function App() {
             <p className="sub">{sectionSub(current)}</p>
           </div>
           <div className="head-actions">
-            {needsControls(current.kind) && monthShown && <span className="period">الشهر المقاس: <b>{MONTH_AR[monthShown]}</b></span>}
+            {needsControls(current.kind) && (isOverview ? monthsSel.length > 0 : monthShown) && <span className="period">{isOverview && monthsSel.length > 1 ? 'الأشهر المقاسة' : 'الشهر المقاس'}: <b>{isOverview ? [...monthsSel].sort((a, b) => MONTH_ORDER_IDX(a) - MONTH_ORDER_IDX(b)).map((m) => MONTH_AR[m]).join('، ') : MONTH_AR[monthShown]}</b></span>}
             <button className="btn" onClick={load} disabled={loading}>{loading ? 'جاري التحميل…' : 'تحديث'}</button>
           </div>
         </header>
@@ -223,7 +245,21 @@ export default function App() {
 
         {data && current.kind !== 'returnsSla' && current.kind !== 'complaints' && (
           <>
-            {needsControls(current.kind) && (
+            {needsControls(current.kind) && isOverview && (
+              <section className="controls">
+                <div className="month-pick" role="group" aria-label="الأشهر المقاسة">
+                  <span className="month-pick-label">الأشهر المقاسة (اختار شهر أو أكتر)</span>
+                  <div className="month-chips">
+                    {months.map((t) => (
+                      <label key={t.month} className={`chip ${monthsSel.includes(t.month) ? 'on' : ''}`}>
+                        <input type="checkbox" checked={monthsSel.includes(t.month)} onChange={() => toggleMonth(t.month)} />{MONTH_AR[t.month]}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
+            {needsControls(current.kind) && !isOverview && (
               <section className="controls">
                 <label>الشهر المقاس
                   <select value={month} onChange={(e) => setMonth(e.target.value)}>
@@ -244,31 +280,33 @@ export default function App() {
 
             {needsControls(current.kind) && !months.length && <div className="alert warn">مفيش شهر معاه 3 شهور سابقة متاحة. تفاصيل التغطية في «جودة البيانات».</div>}
 
-            {current.kind === 'overview' && months.length > 0 && SECTIONS.filter((x) => x.kind === 'metric').map((x) => {
-              const r = results[x.metric];
-              return (
-                <section className="group" key={x.id}>
+            {current.kind === 'overview' && months.length > 0 && perMonth.map((pm) => (
+              <div className="month-block" key={pm.month}>
+                {perMonth.length > 1 && <h2 className="month-head">{MONTH_AR[pm.month]}</h2>}
+                {SECTIONS.filter((x) => x.kind === 'metric').map((x) => {
+                  const r = x.metric === 'delivery' ? pm.delivery : pm.firstAttempt;
+                  const avail = x.metric === 'delivery' ? true : pm.firstAvail;
+                  return (
+                    <section className="group" key={x.id}>
+                      <div className="group-head">
+                        <h2>{sectionLabel(x)}</h2>
+                        <button className="link" onClick={() => { setMonth(pm.month); setSection(x.id); }}>عرض التفاصيل ←</button>
+                      </div>
+                      {r ? <KpiCards result={r} /> : !avail ? <NeedsUpdate /> : <><div className="alert warn">الأساس شهر {MONTH_AR[METRICS[x.metric].baseMonth || BASELINE_MONTH]} — مفيش شهر بعده للمقارنة لسه، فبتظهر أرقام {MONTH_AR[BASELINE_MONTH]} وحدها.</div><MonthSnapshotCards snap={faSnap} metric={firstMetric} /></>}
+                    </section>
+                  );
+                })}
+                <section className="group">
                   <div className="group-head">
-                    <h2>{sectionLabel(x)}</h2>
-                    <button className="link" onClick={() => setSection(x.id)}>عرض التفاصيل ←</button>
+                    <h2>Branch SLA</h2>
+                    <button className="link" onClick={() => { setMonth(pm.month); setSection('branches'); }}>عرض التفاصيل ←</button>
                   </div>
-                  {r.result ? <KpiCards result={r.result} /> : !r.available ? <NeedsUpdate /> : <><div className="alert warn">الأساس شهر {MONTH_AR[METRICS[x.metric].baseMonth || BASELINE_MONTH]} — مفيش شهر بعده للمقارنة لسه، فبتظهر أرقام {MONTH_AR[BASELINE_MONTH]} وحدها.</div><MonthSnapshotCards snap={faSnap} metric={firstMetric} /></>}
+                  {pm.sla.result
+                    ? <SlaOverviewCards data={data} delivery={pm.sla} levels={slaLevels} />
+                    : <><div className="alert warn">الأساس شهر {MONTH_AR[BASELINE_MONTH]} — مفيش شهر بعده للمقارنة لسه، فبتظهر أرقام {MONTH_AR[BASELINE_MONTH]} وحدها.</div><SlaSnapshotCards snap={slaSnap} /></>}
                 </section>
-              );
-            })}
-
-            {current.kind === 'overview' && months.length > 0 && (
-              <section className="group">
-                <div className="group-head">
-                  <h2>Branch SLA</h2>
-                  <button className="link" onClick={() => setSection('branches')}>عرض التفاصيل ←</button>
-                </div>
-                {slaDelivery.result
-                  ? <SlaOverviewCards data={data} delivery={slaDelivery} levels={slaLevels} />
-                  : <><div className="alert warn">الأساس شهر {MONTH_AR[BASELINE_MONTH]} — مفيش شهر بعده للمقارنة لسه، فبتظهر أرقام {MONTH_AR[BASELINE_MONTH]} وحدها.</div><SlaSnapshotCards snap={slaSnap} /></>}
-              </section>
-            )}
-
+              </div>
+            ))}
 
             {current.kind === 'metric' && cur && (!cur.available ? <NeedsUpdate /> : !cur.result ? <div className="alert warn">الأساس لهذا المؤشر شهر {MONTH_AR[METRICS[current.metric].baseMonth || BASELINE_MONTH]}، فاختر شهرًا مقاسًا بعده (ولنفس عملاء نسبة التسليم لازم يكون ليه 3 شهور سابقة).</div> : (
               <MetricPage key={current.id} m={cur} month={month} setMonth={setMonth} hasBranches={hasBranches} targets={targets} />
@@ -309,7 +347,7 @@ export default function App() {
               <h2>الشكاوى والتعويضات</h2>
               <button className="link" onClick={() => setSection('complaints')}>عرض التفاصيل ←</button>
             </div>
-            <ComplaintsOverviewCards />
+            <ComplaintsOverviewCards months={monthsSel.map((m) => MONTH_AR[m])} />
           </section>
         )}
         {current.kind === 'overview' && (
