@@ -5,7 +5,7 @@ import { demoData, demoTargets } from './demo.js';
 import { managementSummary } from './lib/summary.js';
 import { BASELINE_MONTH, METRICS, MONTH_AR, evaluateAllMonths, evaluateBranches, evaluateMonth, monthSnapshot, slaMonthSnapshot } from './lib/quality.js';
 import {
-  Badge, BaselineChart, BranchesTable, CustomersTable, KpiCards, MonthSelect, SummaryBox, TrendTable, num,
+  Badge, BaselineChart, BranchesTable, CustomersTable, Kpi, KpiCards, MonthSelect, SummaryBox, TrendTable, num, pct, pp,
 } from './components.jsx';
 import { BranchesPage, DataQualityPage, MonthSnapshotCards, MonthSnapshotView, SettingsPage, SlaOverviewCards, SlaSnapshotCards, SlaSnapshotView } from './pages.jsx';
 import { SLA } from './lib/sla.js';
@@ -99,6 +99,17 @@ function MetricPage({ m, month, setMonth, hasBranches, targets }) {
   );
 }
 
+/** كارت «مقارنة بأكتوبر»: الشهر المعروض مقابل شهر أكتوبر (نقاط مئوية). مخفي لو الشهر المعروض هو أكتوبر نفسه. */
+function OctCompare({ cur, oct, month }) {
+  if (month === BASELINE_MONTH || cur == null || oct == null) return null;
+  const d = cur - oct;
+  return (
+    <section className="kpis" style={{ marginTop: 14 }}>
+      <Kpi title={`مقارنة ${MONTH_AR[month]} بأكتوبر`} value={pp(d)} tone={d >= 0 ? 'good' : 'bad'} sub={`${pct(cur)} في ${MONTH_AR[month]} مقابل ${pct(oct)} في أكتوبر (فرق بالنقاط المئوية)`} />
+    </section>
+  );
+}
+
 const NeedsUpdate = () => (
   <div className="alert warn">
     بيانات First Attempt مش موجودة في رد السيرفر. اتأكد إن الباك إند المنشور هو آخر نسخة من <code>backend/Code.gs</code>.
@@ -183,10 +194,11 @@ export default function App() {
     const pick = (k) => (months.some((t) => t.month === ovMonth[k]) ? ovMonth[k] : latestMonth);
     const firstAvail = firstMetric.available(data.clients);
     const eligibleFor = (mm) => { const r = evaluateMonth(data.clients, mm, { ...opts, metric: deliveryMetric }); return new Set(r.error ? [] : r.rows.map((x) => x.name)); };
+    const octD = ok(evaluateMonth(data.clients, BASELINE_MONTH, { ...opts, metric: deliveryMetric }));
     const dMonth = pick('delivery'), fMonth = pick('firstAttempt'), sMonth = pick('sla');
     const sRes = ok(evaluateMonth(data.clients, sMonth, { ...opts, metric: deliveryMetric }));
     return {
-      firstAvail,
+      firstAvail, octD,
       delivery: { month: dMonth, result: ok(evaluateMonth(data.clients, dMonth, { ...opts, metric: deliveryMetric })) },
       firstAttempt: { month: fMonth, result: firstAvail ? ok(evaluateMonth(data.clients, fMonth, { ...opts, metric: firstMetric, eligibleFor })) : null },
       sla: { month: sMonth, delivery: sRes && MONTH_ORDER_IDX(sRes.month) > MONTH_ORDER_IDX(BASELINE_MONTH) ? { result: { ...sRes, prev: [BASELINE_MONTH], method: 'pooled' } } : { result: null } },
@@ -280,7 +292,7 @@ export default function App() {
                           <button className="link" onClick={() => { setMonth(o.month); setSection(x.id); }}>عرض التفاصيل ←</button>
                         </div>
                       </div>
-                      {o.result ? <KpiCards result={o.result} /> : !avail ? <NeedsUpdate /> : <><div className="alert warn">الأساس شهر {MONTH_AR[METRICS[x.metric].baseMonth || BASELINE_MONTH]} — مفيش شهر بعده للمقارنة لسه، فبتظهر أرقام {MONTH_AR[BASELINE_MONTH]} وحدها.</div><MonthSnapshotCards snap={faSnap} metric={firstMetric} /></>}
+                      {o.result ? <><KpiCards result={o.result} />{x.metric === 'delivery' && <OctCompare cur={o.result.group.current} oct={ov.octD?.group?.current} month={o.month} />}</> : !avail ? <NeedsUpdate /> : <><div className="alert warn">الأساس شهر {MONTH_AR[METRICS[x.metric].baseMonth || BASELINE_MONTH]} — مفيش شهر بعده للمقارنة لسه، فبتظهر أرقام {MONTH_AR[BASELINE_MONTH]} وحدها.</div><MonthSnapshotCards snap={faSnap} metric={firstMetric} /></>}
                     </section>
                   );
                 })}
