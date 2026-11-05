@@ -125,7 +125,7 @@ export function ReturnsOverviewCards({ limit, levels, demo }) {
     const g = ev.group;
     return (
       <>
-      {comp.length > 1 && (
+      {comp.length > 0 && (
         <div className="sub-row"><span />
           <label className="month-select">الشهر
             <select value={month} onChange={(e) => setSel(e.target.value)}>{comp.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}</select>
