@@ -24,6 +24,17 @@ export function Kpi({ title, value, sub, tone }) {
   );
 }
 
+/** فلتر شهر صغير فوق كل مؤشر (قائمة عادية). months: [{ month }] */
+export function MonthSelect({ months, value, onChange }) {
+  return (
+    <label className="month-select">الشهر
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {months.map((t) => <option key={t.month} value={t.month}>{MONTH_AR[t.month]}</option>)}
+      </select>
+    </label>
+  );
+}
+
 /** Baseline bars + average line + the 3 / 5 / 7 point target lines. */
 export function BaselineChart({ result }) {
   const g = result.group;
