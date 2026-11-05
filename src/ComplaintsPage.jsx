@@ -121,28 +121,38 @@ export default function ComplaintsPage({ demo }) {
 }
 
 /** كارت «المؤشرات الرئيسية»: مؤشر الشكاوى + مؤشر التعويضات (+ المفقود والتالف) لآخر شهر مع إجمالي كل الشهور. */
-export function ComplaintsOverviewCards({ months: sel }) {
+export function ComplaintsOverviewCards() {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState('');
+  // فلتر شهر مستقل لكل مؤشر (الشكاوى / التعويضات)؛ الافتراضي آخر شهر.
+  const [mC, setMC] = useState('');
+  const [mK, setMK] = useState('');
   useEffect(() => { fetchComplaintsRaw().then((r) => setRows(decodeComplaints(r))).catch((e) => setError(e.message || String(e))); }, []);
-  // الأشهر المختارة من فلتر «المؤشرات الرئيسية»؛ لو مفيش اختيار يرجع لآخر شهر.
-  const selKey = (sel || []).join('|');
-  const chosen = useMemo(() => (rows ? (sel && sel.length ? sel : [latestMonth(rows)].filter(Boolean)) : []), [rows, selKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const month = chosen.join('، ');
-  const cur = useMemo(() => (rows ? rows.filter((r) => chosen.includes(r.month)) : []), [rows, chosen]);
-  const st = useMemo(() => overviewStats(cur), [cur]);
+  const months = useMemo(() => (rows ? monthsOf(rows) : []), [rows]);
+  const latest = useMemo(() => (rows ? latestMonth(rows) : null), [rows]);
+  const monthC = months.includes(mC) ? mC : latest;
+  const monthK = months.includes(mK) ? mK : latest;
+  const curC = useMemo(() => (rows ? filterMonth(rows, monthC) : []), [rows, monthC]);
+  const curK = useMemo(() => (rows ? filterMonth(rows, monthK) : []), [rows, monthK]);
+  const st = useMemo(() => overviewStats(curC), [curC]);
+  const stK = useMemo(() => overviewStats(curK), [curK]);
   const all = useMemo(() => (rows ? overviewStats(rows) : null), [rows]);
-  const top = useMemo(() => bearerSummary(cur).find((o) => o.amount > 0), [cur]);
+  const top = useMemo(() => bearerSummary(curK).find((o) => o.amount > 0), [curK]);
   if (error) return <div className="alert err"><b>تعذر تحميل بيانات الشكاوى.</b> {error}</div>;
   if (!rows) return <div className="alert">جاري تحميل بيانات الشكاوى…</div>;
-  if (!rows.length || !chosen.length) return <div className="alert warn">مفيش شكاوى متاحة.</div>;
+  if (!rows.length || !latest) return <div className="alert warn">مفيش شكاوى متاحة.</div>;
+  const pick = (v, set) => (
+    <label className="month-select">الشهر
+      <select value={v} onChange={(e) => set(e.target.value)}>{months.map((m) => <option key={m} value={m}>{m}</option>)}</select>
+    </label>
+  );
   const f1 = (v) => (v === null ? '—' : `${(Math.round(v * 10) / 10).toFixed(1)}`);
   const sla = (o) => (o.pct === null ? '—' : `${Math.round(o.pct)}%`);
   const accTone = st.acceptRate === null ? undefined : (st.acceptRate >= ACCEPT_TARGET_PCT ? 'good' : 'bad');
   const pendPct = st.total ? (st.investigating / st.total) * 100 : 0;
   return (
     <>
-      <h3 className="sub-head">مؤشر الشكاوى — {month}</h3>
+      <div className="sub-row"><h3 className="sub-head">مؤشر الشكاوى</h3>{pick(monthC, setMC)}</div>
       <section className="kpis">
         <Kpi title="إجمالي الشكاوى" value={num(st.total)} tone="brand" sub={`إجمالي كل الشهور ${num(all.total)}`} />
         <Kpi title="نسبة قبول التعويض" value={pctOf(st.accepted, st.decided)} tone={accTone} sub={`${num(st.accepted)} مقبولة من ${num(st.decided)} حالة تم البتّ فيها · الهدف ${ACCEPT_TARGET_PCT}% · كل الشهور ${all.acceptRate === null ? '—' : `${f1(all.acceptRate)}%`}`} />
@@ -151,13 +161,13 @@ export function ComplaintsOverviewCards({ months: sel }) {
         <Kpi title="الالتزام بـ SLA التحقيق" value={sla(st.resSla)} sub={`متوسط زمن الحل ${f1(st.resSla.avg)} يوم · الهدف ${RES_SLA_TARGET_DAYS} أيام · ${num(st.resSla.count)} حالة`} />
         <Kpi title="الالتزام بـ SLA التعويض" value={sla(st.compSla)} sub={`متوسط زمن التنفيذ ${f1(st.compSla.avg)} يوم · الهدف ${COMP_SLA_TARGET_DAYS} يوم من النتيجة · ${num(st.compSla.count)} حالة`} />
       </section>
-      <h3 className="sub-head">مؤشر التعويضات — {month}</h3>
+      <div className="sub-row"><h3 className="sub-head">مؤشر التعويضات</h3>{pick(monthK, setMK)}</div>
       <section className="kpis">
-        <Kpi title="إجمالي التعويضات (ج.م)" value={num(st.amount)} sub={`${num(st.compensated)} حالة بتعويض · كل الشهور ${num(all.amount)}`} />
-        <Kpi title="تعويضات الشركة (ج.م)" value={num(st.companyAmount)} sub={`${num(st.companyCount)} حالة · ${pctOf(st.companyAmount, st.amount)} من تعويضات الشهر · كل الشهور ${num(all.companyAmount)}`} />
-        <Kpi title="أكبر جهة متحملة" value={top ? top.bearer : '—'} sub={top ? `${num(top.amount)} ج.م · ${pctOf(top.amount, st.amount)} من تعويضات الشهر` : 'لا توجد تعويضات'} />
-        <Kpi title="المفقود (شحنة/مرتجع)" value={num(st.lost.count)} tone={st.lost.count ? 'bad' : undefined} sub={`تعويض ${num(st.lost.amount)} ج.م · كل الشهور ${num(all.lost.count)} شكوى`} />
-        <Kpi title="التالف (شحنة هالكة)" value={num(st.damaged.count)} tone={st.damaged.count ? 'bad' : undefined} sub={`تعويض ${num(st.damaged.amount)} ج.م · كل الشهور ${num(all.damaged.count)} شكوى`} />
+        <Kpi title="إجمالي التعويضات (ج.م)" value={num(stK.amount)} sub={`${num(stK.compensated)} حالة بتعويض · كل الشهور ${num(all.amount)}`} />
+        <Kpi title="تعويضات الشركة (ج.م)" value={num(stK.companyAmount)} sub={`${num(stK.companyCount)} حالة · ${pctOf(stK.companyAmount, stK.amount)} من تعويضات الشهر · كل الشهور ${num(all.companyAmount)}`} />
+        <Kpi title="أكبر جهة متحملة" value={top ? top.bearer : '—'} sub={top ? `${num(top.amount)} ج.م · ${pctOf(top.amount, stK.amount)} من تعويضات الشهر` : 'لا توجد تعويضات'} />
+        <Kpi title="المفقود (شحنة/مرتجع)" value={num(stK.lost.count)} tone={stK.lost.count ? 'bad' : undefined} sub={`تعويض ${num(stK.lost.amount)} ج.م · كل الشهور ${num(all.lost.count)} شكوى`} />
+        <Kpi title="التالف (شحنة هالكة)" value={num(stK.damaged.count)} tone={stK.damaged.count ? 'bad' : undefined} sub={`تعويض ${num(stK.damaged.amount)} ج.م · كل الشهور ${num(all.damaged.count)} شكوى`} />
       </section>
     </>
   );

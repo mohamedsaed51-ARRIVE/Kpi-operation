@@ -5,7 +5,7 @@ import { demoData, demoTargets } from './demo.js';
 import { managementSummary } from './lib/summary.js';
 import { BASELINE_MONTH, METRICS, MONTH_AR, evaluateAllMonths, evaluateBranches, evaluateMonth, monthSnapshot, slaMonthSnapshot } from './lib/quality.js';
 import {
-  Badge, BaselineChart, BranchesTable, CustomersTable, KpiCards, SummaryBox, TrendTable, num,
+  Badge, BaselineChart, BranchesTable, CustomersTable, KpiCards, MonthSelect, SummaryBox, TrendTable, num,
 } from './components.jsx';
 import { BranchesPage, DataQualityPage, MonthSnapshotCards, MonthSnapshotView, SettingsPage, SlaOverviewCards, SlaSnapshotCards, SlaSnapshotView } from './pages.jsx';
 import { SLA } from './lib/sla.js';
@@ -105,7 +105,7 @@ const NeedsUpdate = () => (
   </div>
 );
 
-const needsControls = (kind) => kind === 'overview' || kind === 'metric' || kind === 'branches';
+const needsControls = (kind) => kind === 'metric' || kind === 'branches';
 
 export default function App() {
   const demo = new URLSearchParams(location.search).has('demo');
@@ -118,7 +118,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState(null);
   const [month, setMonth] = useState('');
-  const [monthsSel, setMonthsSel] = useState([]); // «المؤشرات الرئيسية»: أكثر من شهر مقاس
+  const [ovMonth, setOvMonth] = useState({}); // «المؤشرات الرئيسية»: شهر مستقل لكل مؤشر { delivery, firstAttempt, sla }
   const [method, setMethod] = useState('pooled');
   const [minShipments, setMin] = useState(1);
   const [section, setSection] = useState('overview');
@@ -173,25 +173,25 @@ export default function App() {
   useEffect(() => {
     if (data && months.length && !months.some((t) => t.month === month)) setMonth(months[months.length - 1].month);
   }, [data, months, month]);
-  useEffect(() => {
-    if (!data || !months.length) return;
-    const valid = monthsSel.filter((m) => months.some((t) => t.month === m));
-    if (valid.length !== monthsSel.length || !valid.length) setMonthsSel(valid.length ? valid : [months[months.length - 1].month]);
-  }, [data, months, monthsSel]);
-  const toggleMonth = (m) => setMonthsSel((cur) => (cur.includes(m) ? (cur.length > 1 ? cur.filter((x) => x !== m) : cur) : [...cur, m]));
-  // نتائج كل شهر مختار في «المؤشرات الرئيسية» (نفس محرك الصفحات التفصيلية).
-  const perMonth = useMemo(() => {
-    if (!data || !isOverview) return [];
+  // كل مؤشر في «المؤشرات الرئيسية» له فلتر شهر خاص بيه (الافتراضي: آخر شهر متاح) ومش بيأثر في غيره.
+  const latestMonth = months.length ? months[months.length - 1].month : '';
+  const ovMonthOf = (k) => (months.some((t) => t.month === ovMonth[k]) ? ovMonth[k] : latestMonth);
+  const setOv = (k, m) => setOvMonth((cur) => ({ ...cur, [k]: m }));
+  const ov = useMemo(() => {
+    if (!data || !isOverview || !latestMonth) return null;
     const ok = (r) => (r && !r.error ? r : null);
+    const pick = (k) => (months.some((t) => t.month === ovMonth[k]) ? ovMonth[k] : latestMonth);
     const firstAvail = firstMetric.available(data.clients);
     const eligibleFor = (mm) => { const r = evaluateMonth(data.clients, mm, { ...opts, metric: deliveryMetric }); return new Set(r.error ? [] : r.rows.map((x) => x.name)); };
-    return [...monthsSel].sort((a, b) => MONTH_ORDER_IDX(a) - MONTH_ORDER_IDX(b)).map((m) => {
-      const delivery = ok(evaluateMonth(data.clients, m, { ...opts, metric: deliveryMetric }));
-      const firstAttempt = firstAvail ? ok(evaluateMonth(data.clients, m, { ...opts, metric: firstMetric, eligibleFor })) : null;
-      const sla = delivery && MONTH_ORDER_IDX(delivery.month) > MONTH_ORDER_IDX(BASELINE_MONTH) ? { result: { ...delivery, prev: [BASELINE_MONTH], method: 'pooled' } } : { result: null };
-      return { month: m, delivery, firstAttempt, firstAvail, sla };
-    });
-  }, [data, isOverview, monthsSel, opts, deliveryMetric, firstMetric]);
+    const dMonth = pick('delivery'), fMonth = pick('firstAttempt'), sMonth = pick('sla');
+    const sRes = ok(evaluateMonth(data.clients, sMonth, { ...opts, metric: deliveryMetric }));
+    return {
+      firstAvail,
+      delivery: { month: dMonth, result: ok(evaluateMonth(data.clients, dMonth, { ...opts, metric: deliveryMetric })) },
+      firstAttempt: { month: fMonth, result: firstAvail ? ok(evaluateMonth(data.clients, fMonth, { ...opts, metric: firstMetric, eligibleFor })) : null },
+      sla: { month: sMonth, delivery: sRes && MONTH_ORDER_IDX(sRes.month) > MONTH_ORDER_IDX(BASELINE_MONTH) ? { result: { ...sRes, prev: [BASELINE_MONTH], method: 'pooled' } } : { result: null } },
+    };
+  }, [data, isOverview, months, ovMonth, latestMonth, opts, deliveryMetric, firstMetric]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const current = SECTIONS.find((x) => x.id === section);
   const cur = current.metric ? results[current.metric] : null;
@@ -229,7 +229,7 @@ export default function App() {
             <p className="sub">{sectionSub(current)}</p>
           </div>
           <div className="head-actions">
-            {needsControls(current.kind) && (isOverview ? monthsSel.length > 0 : monthShown) && <span className="period">{isOverview && monthsSel.length > 1 ? 'الأشهر المقاسة' : 'الشهر المقاس'}: <b>{isOverview ? [...monthsSel].sort((a, b) => MONTH_ORDER_IDX(a) - MONTH_ORDER_IDX(b)).map((m) => MONTH_AR[m]).join('، ') : MONTH_AR[monthShown]}</b></span>}
+            {needsControls(current.kind) && monthShown && <span className="period">الشهر المقاس: <b>{MONTH_AR[monthShown]}</b></span>}
             <button className="btn" onClick={load} disabled={loading}>{loading ? 'جاري التحميل…' : 'تحديث'}</button>
           </div>
         </header>
@@ -245,21 +245,7 @@ export default function App() {
 
         {data && current.kind !== 'returnsSla' && current.kind !== 'complaints' && (
           <>
-            {needsControls(current.kind) && isOverview && (
-              <section className="controls">
-                <div className="month-pick" role="group" aria-label="الأشهر المقاسة">
-                  <span className="month-pick-label">الأشهر المقاسة (اختار شهر أو أكتر)</span>
-                  <div className="month-chips">
-                    {months.map((t) => (
-                      <label key={t.month} className={`chip ${monthsSel.includes(t.month) ? 'on' : ''}`}>
-                        <input type="checkbox" checked={monthsSel.includes(t.month)} onChange={() => toggleMonth(t.month)} />{MONTH_AR[t.month]}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </section>
-            )}
-            {needsControls(current.kind) && !isOverview && (
+            {needsControls(current.kind) && (
               <section className="controls">
                 <label>الشهر المقاس
                   <select value={month} onChange={(e) => setMonth(e.target.value)}>
@@ -278,35 +264,40 @@ export default function App() {
               </section>
             )}
 
-            {needsControls(current.kind) && !months.length && <div className="alert warn">مفيش شهر معاه 3 شهور سابقة متاحة. تفاصيل التغطية في «جودة البيانات».</div>}
+            {(needsControls(current.kind) || current.kind === 'overview') && !months.length && <div className="alert warn">مفيش شهر معاه 3 شهور سابقة متاحة. تفاصيل التغطية في «جودة البيانات».</div>}
 
-            {current.kind === 'overview' && months.length > 0 && perMonth.map((pm) => (
-              <div className="month-block" key={pm.month}>
-                {perMonth.length > 1 && <h2 className="month-head">{MONTH_AR[pm.month]}</h2>}
+            {current.kind === 'overview' && months.length > 0 && ov && (
+              <>
                 {SECTIONS.filter((x) => x.kind === 'metric').map((x) => {
-                  const r = x.metric === 'delivery' ? pm.delivery : pm.firstAttempt;
-                  const avail = x.metric === 'delivery' ? true : pm.firstAvail;
+                  const o = ov[x.metric];
+                  const avail = x.metric === 'delivery' ? true : ov.firstAvail;
                   return (
                     <section className="group" key={x.id}>
                       <div className="group-head">
                         <h2>{sectionLabel(x)}</h2>
-                        <button className="link" onClick={() => { setMonth(pm.month); setSection(x.id); }}>عرض التفاصيل ←</button>
+                        <div className="group-tools">
+                          <MonthSelect months={months} value={o.month} onChange={(m) => setOv(x.metric, m)} />
+                          <button className="link" onClick={() => { setMonth(o.month); setSection(x.id); }}>عرض التفاصيل ←</button>
+                        </div>
                       </div>
-                      {r ? <KpiCards result={r} /> : !avail ? <NeedsUpdate /> : <><div className="alert warn">الأساس شهر {MONTH_AR[METRICS[x.metric].baseMonth || BASELINE_MONTH]} — مفيش شهر بعده للمقارنة لسه، فبتظهر أرقام {MONTH_AR[BASELINE_MONTH]} وحدها.</div><MonthSnapshotCards snap={faSnap} metric={firstMetric} /></>}
+                      {o.result ? <KpiCards result={o.result} /> : !avail ? <NeedsUpdate /> : <><div className="alert warn">الأساس شهر {MONTH_AR[METRICS[x.metric].baseMonth || BASELINE_MONTH]} — مفيش شهر بعده للمقارنة لسه، فبتظهر أرقام {MONTH_AR[BASELINE_MONTH]} وحدها.</div><MonthSnapshotCards snap={faSnap} metric={firstMetric} /></>}
                     </section>
                   );
                 })}
                 <section className="group">
                   <div className="group-head">
                     <h2>Branch SLA</h2>
-                    <button className="link" onClick={() => { setMonth(pm.month); setSection('branches'); }}>عرض التفاصيل ←</button>
+                    <div className="group-tools">
+                      <MonthSelect months={months} value={ov.sla.month} onChange={(m) => setOv('sla', m)} />
+                      <button className="link" onClick={() => { setMonth(ov.sla.month); setSection('branches'); }}>عرض التفاصيل ←</button>
+                    </div>
                   </div>
-                  {pm.sla.result
-                    ? <SlaOverviewCards data={data} delivery={pm.sla} levels={slaLevels} />
+                  {ov.sla.delivery.result
+                    ? <SlaOverviewCards data={data} delivery={ov.sla.delivery} levels={slaLevels} />
                     : <><div className="alert warn">الأساس شهر {MONTH_AR[BASELINE_MONTH]} — مفيش شهر بعده للمقارنة لسه، فبتظهر أرقام {MONTH_AR[BASELINE_MONTH]} وحدها.</div><SlaSnapshotCards snap={slaSnap} /></>}
                 </section>
-              </div>
-            ))}
+              </>
+            )}
 
             {current.kind === 'metric' && cur && (!cur.available ? <NeedsUpdate /> : !cur.result ? <div className="alert warn">الأساس لهذا المؤشر شهر {MONTH_AR[METRICS[current.metric].baseMonth || BASELINE_MONTH]}، فاختر شهرًا مقاسًا بعده (ولنفس عملاء نسبة التسليم لازم يكون ليه 3 شهور سابقة).</div> : (
               <MetricPage key={current.id} m={cur} month={month} setMonth={setMonth} hasBranches={hasBranches} targets={targets} />
@@ -347,7 +338,7 @@ export default function App() {
               <h2>الشكاوى والتعويضات</h2>
               <button className="link" onClick={() => setSection('complaints')}>عرض التفاصيل ←</button>
             </div>
-            <ComplaintsOverviewCards months={monthsSel.map((m) => MONTH_AR[m])} />
+            <ComplaintsOverviewCards />
           </section>
         )}
         {current.kind === 'overview' && (

@@ -164,3 +164,8 @@ tr.sel { background: #EAF3FF; }
 .chip input { accent-color: var(--blue); }
 .chip.on { background: #EAF1FF; border-color: var(--blue); color: var(--blue); font-weight: 700; }
 .month-head { font-size: 20px; margin: 22px 0 6px; padding-right: 10px; border-right: 4px solid var(--blue); }
+.group-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.month-select { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--gray); font-weight: 600; }
+.month-select select { padding: 5px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); font: inherit; color: inherit; }
+.sub-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0 8px; }
+.sub-row .sub-head { margin: 0; }
