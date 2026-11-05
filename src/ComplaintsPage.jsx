@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { fetchComplaintsRaw } from './api.js';
 import { Kpi, num } from './components.jsx';
-import { ALL_MONTHS, bearerSummary, countBy, csvText, decodeComplaints, filterMonth, isOpen, latestMonth, monthsOf, sumAmount } from './lib/complaints.js';
+import { ALL_MONTHS, bearerSummary, countBy, csvText, decodeComplaints, filterMonth, isOpen, latestMonth, monthsOf, overviewStats, sumAmount } from './lib/complaints.js';
 
 const DETAIL_LIMIT = 300;
 const GROUPS = [['type', 'النوع'], ['branch', 'الفرع'], ['classification', 'التصنيف'], ['status', 'الحالة']];
@@ -120,23 +120,36 @@ export default function ComplaintsPage({ demo }) {
   );
 }
 
-/** كروت «المؤشرات الرئيسية»: الشكاوى والتعويضات لآخر شهر + إجمالي كل الشهور. */
+/** كارت «المؤشرات الرئيسية»: مؤشر الشكاوى + مؤشر التعويضات (+ المفقود والتالف) لآخر شهر مع إجمالي كل الشهور. */
 export function ComplaintsOverviewCards() {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState('');
   useEffect(() => { fetchComplaintsRaw().then((r) => setRows(decodeComplaints(r))).catch((e) => setError(e.message || String(e))); }, []);
   const month = useMemo(() => (rows ? latestMonth(rows) : null), [rows]);
   const cur = useMemo(() => (rows ? filterMonth(rows, month) : []), [rows, month]);
+  const st = useMemo(() => overviewStats(cur), [cur]);
+  const all = useMemo(() => (rows ? overviewStats(rows) : null), [rows]);
   const top = useMemo(() => bearerSummary(cur).find((o) => o.amount > 0), [cur]);
   if (error) return <div className="alert err"><b>تعذر تحميل بيانات الشكاوى.</b> {error}</div>;
   if (!rows) return <div className="alert">جاري تحميل بيانات الشكاوى…</div>;
   if (!rows.length || !month) return <div className="alert warn">مفيش شكاوى متاحة.</div>;
-  const sum = sumAmount(cur);
   return (
-    <section className="kpis">
-      <Kpi title={`عدد الشكاوى — ${month}`} value={num(cur.length)} tone="brand" sub={`${num(cur.filter(isOpen).length)} مفتوحة · إجمالي كل الشهور ${num(rows.length)}`} />
-      <Kpi title={`إجمالي التعويض (ج.م) — ${month}`} value={num(sum)} sub={`${num(cur.filter((r) => (r.amount || 0) > 0).length)} حالة بتعويض · إجمالي كل الشهور ${num(sumAmount(rows))}`} />
-      <Kpi title={`أعلى جهة تحميلًا — ${month}`} value={top ? top.bearer : '—'} sub={top ? `${num(top.amount)} ج.م · ${pctOf(top.amount, sum)} من تعويضات الشهر` : 'لا توجد تعويضات'} />
-    </section>
+    <>
+      <h3 className="sub-head">مؤشر الشكاوى — {month}</h3>
+      <section className="kpis">
+        <Kpi title="إجمالي الشكاوى" value={num(st.total)} tone="brand" sub={`إجمالي كل الشهور ${num(all.total)}`} />
+        <Kpi title="نسبة قبول التعويض" value={pctOf(st.accepted, st.total)} sub={`${num(st.accepted)} شكوى اتقبل فيها التعويض من ${num(st.total)} · كل الشهور ${pctOf(all.accepted, all.total)}`} />
+        <Kpi title="قيد التحقيق" value={num(st.investigating)} sub={`كل الشهور ${num(all.investigating)}`} />
+        <Kpi title="الشكاوى المفتوحة" value={num(st.open)} tone={st.open ? 'bad' : 'good'} sub={`كل الشهور ${num(all.open)}`} />
+      </section>
+      <h3 className="sub-head">مؤشر التعويضات — {month}</h3>
+      <section className="kpis">
+        <Kpi title="إجمالي التعويضات (ج.م)" value={num(st.amount)} sub={`${num(st.compensated)} حالة بتعويض · كل الشهور ${num(all.amount)}`} />
+        <Kpi title="تعويضات الشركة (ج.م)" value={num(st.companyAmount)} sub={`${num(st.companyCount)} حالة · ${pctOf(st.companyAmount, st.amount)} من تعويضات الشهر · كل الشهور ${num(all.companyAmount)}`} />
+        <Kpi title="أكبر جهة متحملة" value={top ? top.bearer : '—'} sub={top ? `${num(top.amount)} ج.م · ${pctOf(top.amount, st.amount)} من تعويضات الشهر` : 'لا توجد تعويضات'} />
+        <Kpi title="المفقود" value={num(st.lost.count)} tone={st.lost.count ? 'bad' : undefined} sub={`تعويض ${num(st.lost.amount)} ج.م · كل الشهور ${num(all.lost.count)} شكوى`} />
+        <Kpi title="التالف" value={num(st.damaged.count)} tone={st.damaged.count ? 'bad' : undefined} sub={`تعويض ${num(st.damaged.amount)} ج.م · كل الشهور ${num(all.damaged.count)} شكوى`} />
+      </section>
+    </>
   );
 }

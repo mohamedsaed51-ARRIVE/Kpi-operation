@@ -155,3 +155,5 @@ ul.plain { margin: 6px 0 0; padding-inline-start: 20px; line-height: 1.9; }
 .pager { display: flex; gap: 14px; align-items: center; justify-content: center; margin-top: 10px; }
 tr.sel { background: #EAF3FF; }
 .grid-2 > * { min-width: 0; }
+.sub-head { font-size: 14px; color: var(--gray); font-weight: 700; margin: 14px 0 8px; }
+.group .sub-head:first-of-type { margin-top: 0; }

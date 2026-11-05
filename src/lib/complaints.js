@@ -84,3 +84,40 @@ export function latestMonth(rows) {
   rows.forEach((r) => { if (r.month && r.date && (!best || r.date > best.date)) best = r; });
   return best ? best.month : null;
 }
+
+// ---- مؤشرات كارت «المؤشرات الرئيسية» ----
+const norm = (s) => str(s).replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+/** شكوى «قيد التحقيق». */
+export const isInvestigating = (r) => !!r.status && r.status.includes('التحقيق');
+/** شكوى اتقبل فيها التعويض (الحالة فيها «قبول» من غير نفي/رفض). */
+export const isAccepted = (r) => { const s = norm(r.status); return s.includes('قبول') && !/(لم|رفض|عدم)/.test(s); };
+/** الجهة المتحملة = الشركة (بتطبيع أ/ا و ة/ه). */
+export const isCompanyBearer = (r) => norm(r.bearer).includes('الشركه');
+export const isLost = (r) => norm(r.classification).includes('مفقود');
+export const isDamaged = (r) => /(تالف|تلف)/.test(norm(r.classification));
+
+/** عدد وتعويض فئة (مفقود/تالف) من «تصنيف المشكلة». */
+export function classStats(rows, pred) {
+  const sel = rows.filter(pred);
+  return { count: sel.length, amount: sumAmount(sel) };
+}
+
+/** كل مؤشرات الكارت لمجموعة صفوف. */
+export function overviewStats(rows) {
+  const total = rows.length;
+  const accepted = rows.filter(isAccepted).length;
+  const company = rows.filter(isCompanyBearer);
+  return {
+    total,
+    open: rows.filter(isOpen).length,
+    investigating: rows.filter(isInvestigating).length,
+    accepted,
+    acceptRate: total ? (accepted / total) * 100 : null,
+    amount: sumAmount(rows),
+    compensated: rows.filter((r) => (r.amount || 0) > 0).length,
+    companyAmount: sumAmount(company),
+    companyCount: company.filter((r) => (r.amount || 0) > 0).length,
+    lost: classStats(rows, isLost),
+    damaged: classStats(rows, isDamaged),
+  };
+}

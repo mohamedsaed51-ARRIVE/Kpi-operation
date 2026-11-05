@@ -49,3 +49,17 @@ test('latestMonth uses the newest date, not calendar order', () => {
   assert.equal(latestMonth([{ month: 'ديسمبر', date: '2025-12-01' }, { month: 'يناير', date: '2026-01-02' }]), 'يناير');
   assert.equal(latestMonth([]), null);
 });
+
+import { overviewStats, isAccepted, isLost, isDamaged } from '../src/lib/complaints.js';
+test('overviewStats: accept rate, company bearer, lost/damaged by classification', () => {
+  const r = decodeComplaints([
+    { 'رقم الشكوى': 1, 'تاريخ الأضافة': '2026-10-03', 'تصنيف المشكلة': 'شحنة مفقودة', 'وظيفه المتحمل': 'الشركة', 'مبلغ التعويض المستحق': 500, 'حالة الشكوى الحاليه': 'تم قبول التعويض' },
+    { 'رقم الشكوى': 2, 'تاريخ الأضافة': '2026-10-04', 'تصنيف المشكلة': 'شحنة تالفة', 'وظيفه المتحمل': 'مندوب', 'مبلغ التعويض المستحق': 200, 'حالة الشكوى الحاليه': 'تم رفض التعويض' },
+    { 'رقم الشكوى': 3, 'تاريخ الأضافة': '2026-10-05', 'تصنيف المشكلة': 'تأخير', 'وظيفه المتحمل': 'الشركه', 'حالة الشكوى الحاليه': 'جارى التحقيق' },
+  ]);
+  const s = overviewStats(r);
+  assert.equal(s.total, 3); assert.equal(s.accepted, 1); assert.equal(s.investigating, 1); assert.equal(s.open, 1);
+  assert.equal(s.amount, 700); assert.equal(s.companyAmount, 500); assert.equal(s.companyCount, 1);
+  assert.deepEqual(s.lost, { count: 1, amount: 500 }); assert.deepEqual(s.damaged, { count: 1, amount: 200 });
+  assert.equal(isAccepted(r[1]), false); assert.equal(isLost(r[2]), false); assert.equal(isDamaged(r[0]), false);
+});
