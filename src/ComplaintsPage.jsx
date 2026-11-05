@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { fetchComplaintsRaw } from './api.js';
 import { Kpi, num } from './components.jsx';
-import { ALL_MONTHS, bearerSummary, countBy, csvText, decodeComplaints, filterMonth, isOpen, latestMonth, monthsOf, overviewStats, sumAmount } from './lib/complaints.js';
+import { ACCEPT_TARGET_PCT, ALL_MONTHS, COMP_SLA_TARGET_DAYS, PENDING_TARGET_PCT, RES_SLA_TARGET_DAYS, bearerSummary, countBy, csvText, decodeComplaints, filterMonth, isOpen, latestMonth, monthsOf, overviewStats, sumAmount } from './lib/complaints.js';
 
 const DETAIL_LIMIT = 300;
 const GROUPS = [['type', 'النوع'], ['branch', 'الفرع'], ['classification', 'التصنيف'], ['status', 'الحالة']];
@@ -133,22 +133,28 @@ export function ComplaintsOverviewCards() {
   if (error) return <div className="alert err"><b>تعذر تحميل بيانات الشكاوى.</b> {error}</div>;
   if (!rows) return <div className="alert">جاري تحميل بيانات الشكاوى…</div>;
   if (!rows.length || !month) return <div className="alert warn">مفيش شكاوى متاحة.</div>;
+  const f1 = (v) => (v === null ? '—' : `${(Math.round(v * 10) / 10).toFixed(1)}`);
+  const sla = (o) => (o.pct === null ? '—' : `${Math.round(o.pct)}%`);
+  const accTone = st.acceptRate === null ? undefined : (st.acceptRate >= ACCEPT_TARGET_PCT ? 'good' : 'bad');
+  const pendPct = st.total ? (st.investigating / st.total) * 100 : 0;
   return (
     <>
       <h3 className="sub-head">مؤشر الشكاوى — {month}</h3>
       <section className="kpis">
         <Kpi title="إجمالي الشكاوى" value={num(st.total)} tone="brand" sub={`إجمالي كل الشهور ${num(all.total)}`} />
-        <Kpi title="نسبة قبول التعويض" value={pctOf(st.accepted, st.total)} sub={`${num(st.accepted)} شكوى اتقبل فيها التعويض من ${num(st.total)} · كل الشهور ${pctOf(all.accepted, all.total)}`} />
-        <Kpi title="قيد التحقيق" value={num(st.investigating)} sub={`كل الشهور ${num(all.investigating)}`} />
-        <Kpi title="الشكاوى المفتوحة" value={num(st.open)} tone={st.open ? 'bad' : 'good'} sub={`كل الشهور ${num(all.open)}`} />
+        <Kpi title="نسبة قبول التعويض" value={pctOf(st.accepted, st.decided)} tone={accTone} sub={`${num(st.accepted)} مقبولة من ${num(st.decided)} حالة تم البتّ فيها · الهدف ${ACCEPT_TARGET_PCT}% · كل الشهور ${all.acceptRate === null ? '—' : `${f1(all.acceptRate)}%`}`} />
+        <Kpi title="قيد التحقيق" value={num(st.investigating)} tone={pendPct <= PENDING_TARGET_PCT ? 'good' : 'bad'} sub={`${f1(pendPct)}% من الإجمالي · الهدف أقل من ${PENDING_TARGET_PCT}%`} />
+        <Kpi title="الشكاوى المفتوحة" value={num(st.open)} tone={st.open ? 'bad' : 'good'} sub={`قيد التحقيق + مراجعة/رد الشكاوي/معلقة · كل الشهور ${num(all.open)}`} />
+        <Kpi title="الالتزام بـ SLA التحقيق" value={sla(st.resSla)} sub={`متوسط زمن الحل ${f1(st.resSla.avg)} يوم · الهدف ${RES_SLA_TARGET_DAYS} أيام · ${num(st.resSla.count)} حالة`} />
+        <Kpi title="الالتزام بـ SLA التعويض" value={sla(st.compSla)} sub={`متوسط زمن التنفيذ ${f1(st.compSla.avg)} يوم · الهدف ${COMP_SLA_TARGET_DAYS} يوم من النتيجة · ${num(st.compSla.count)} حالة`} />
       </section>
       <h3 className="sub-head">مؤشر التعويضات — {month}</h3>
       <section className="kpis">
         <Kpi title="إجمالي التعويضات (ج.م)" value={num(st.amount)} sub={`${num(st.compensated)} حالة بتعويض · كل الشهور ${num(all.amount)}`} />
         <Kpi title="تعويضات الشركة (ج.م)" value={num(st.companyAmount)} sub={`${num(st.companyCount)} حالة · ${pctOf(st.companyAmount, st.amount)} من تعويضات الشهر · كل الشهور ${num(all.companyAmount)}`} />
         <Kpi title="أكبر جهة متحملة" value={top ? top.bearer : '—'} sub={top ? `${num(top.amount)} ج.م · ${pctOf(top.amount, st.amount)} من تعويضات الشهر` : 'لا توجد تعويضات'} />
-        <Kpi title="المفقود" value={num(st.lost.count)} tone={st.lost.count ? 'bad' : undefined} sub={`تعويض ${num(st.lost.amount)} ج.م · كل الشهور ${num(all.lost.count)} شكوى`} />
-        <Kpi title="التالف" value={num(st.damaged.count)} tone={st.damaged.count ? 'bad' : undefined} sub={`تعويض ${num(st.damaged.amount)} ج.م · كل الشهور ${num(all.damaged.count)} شكوى`} />
+        <Kpi title="المفقود (شحنة/مرتجع)" value={num(st.lost.count)} tone={st.lost.count ? 'bad' : undefined} sub={`تعويض ${num(st.lost.amount)} ج.م · كل الشهور ${num(all.lost.count)} شكوى`} />
+        <Kpi title="التالف (شحنة هالكة)" value={num(st.damaged.count)} tone={st.damaged.count ? 'bad' : undefined} sub={`تعويض ${num(st.damaged.amount)} ج.م · كل الشهور ${num(all.damaged.count)} شكوى`} />
       </section>
     </>
   );
