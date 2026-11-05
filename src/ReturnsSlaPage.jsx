@@ -4,7 +4,7 @@ import { RETURNS_SLA_URL } from './config.js';
 import { demoReturns } from './demo.js';
 import { Badge, Kpi } from './components.jsx';
 import { levelFor } from './lib/quality.js';
-import { AGE_BUCKETS, FLAGS, UNKNOWN, ageOf, comparableMonths, decodeReturns, evaluateReturnsMonth, filterReturns, groupStats, monthLabel, stats } from './lib/returnsSla.js';
+import { AGE_BUCKETS, FLAGS, UNKNOWN, ageOf, comparableMonths, decodeReturns, evaluateReturnsMonth, filterReturns, groupStats, monthKeyOf, monthLabel, stats } from './lib/returnsSla.js';
 
 const fmt = (n) => (n == null || Number.isNaN(n) ? '—' : Number(n).toLocaleString('en-US'));
 const f1 = (n) => (n == null || Number.isNaN(n) ? '—' : Number(n).toLocaleString('en-US', { maximumFractionDigits: 1 }));
@@ -116,22 +116,33 @@ export function ReturnsOverviewCards({ limit, levels, demo }) {
   const months = useMemo(() => (rows ? comparableMonths(rows, age) : null), [rows, age]);
   const [sel, setSel] = useState('');
   const comp = months?.comparable || [];
-  const month = comp.includes(sel) ? sel : comp[comp.length - 1];
+  const present = months?.present || [];
+  // كل الشهور اللي فيها مرتجعات تتختار (حتى اللي مالهاش شهر سابق للمقارنة)؛ الافتراضي آخر شهر قابل للمقارنة.
+  const month = present.includes(sel) ? sel : (comp[comp.length - 1] || present[present.length - 1]);
   const ev = useMemo(() => (rows && month ? evaluateReturnsMonth(rows, month, age, levels, levelFor) : null), [rows, month, age, levels]);
   const T = useMemo(() => (rows ? stats(rows, age, limit) : null), [rows, age, limit]);
+  const M = useMemo(() => (rows && month ? stats(rows.filter((r) => monthKeyOf(r) === month), age, limit) : null), [rows, month, age, limit]);
+  const octKey = month ? `${month.slice(0, 4)}-10` : null;
+  const O = useMemo(() => (rows && octKey && octKey !== month ? stats(rows.filter((r) => monthKeyOf(r) === octKey), age, limit) : null), [rows, octKey, month, age, limit]);
+  const octCard = M && O && O.n > 0 && M.n > 0 && (
+    <section className="kpis" style={{ marginTop: 14 }}>
+      <Kpi title={`مقارنة ${monthLabel(month)} بأكتوبر`} value={`${M.avg - O.avg > 0 ? '+' : ''}${(M.avg - O.avg).toFixed(2)} يوم`} tone={M.avg <= O.avg ? 'good' : 'bad'} sub={`${f1(M.avg)} يوم في ${monthLabel(month)} مقابل ${f1(O.avg)} في أكتوبر (الأقل = أسرع)`} />
+    </section>
+  );
+  const picker = present.length > 0 && (
+    <div className="sub-row"><span />
+      <label className="month-select">الشهر
+        <select value={month} onChange={(e) => setSel(e.target.value)}>{present.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}</select>
+      </label>
+    </div>
+  );
   if (error) return <div className="alert err"><b>تعذر تحميل بيانات SLA المرتجعات.</b> {error}</div>;
   if (!rows) return <div className="alert">جاري تحميل بيانات SLA المرتجعات…</div>;
   if (ev?.group) {
     const g = ev.group;
     return (
       <>
-      {comp.length > 0 && (
-        <div className="sub-row"><span />
-          <label className="month-select">الشهر
-            <select value={month} onChange={(e) => setSel(e.target.value)}>{comp.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}</select>
-          </label>
-        </div>
-      )}
+      {picker}
       <section className="kpis">
         <Kpi title="متوسط عمر المرتجع — آخر 3 شهور" value={`${f1(g.baseline)} يوم`} sub={`${ev.usedPrev.map(monthLabel).join(' + ')}${ev.usedPrev.length < 3 ? ` (المتاح ${ev.usedPrev.length} من 3 شهور)` : ''} · ${fmt(g.nBase)} مرتجع`} />
         <Kpi title={`متوسط عمر المرتجع — ${monthLabel(ev.month)}`} value={`${f1(g.current)} يوم`} tone="brand" sub={`${fmt(g.nCur)} مرتجع`} />
@@ -142,6 +153,21 @@ export function ReturnsOverviewCards({ limit, levels, demo }) {
           <div className="kpi-sub">{levels.slice(0, 3).reverse().map((l) => `${l.label} ≥ ${l.minDelta}`).join(' · ')} يوم أسرع</div>
         </div>
       </section>
+      {octCard}
+      </>
+    );
+  }
+  if (month && M && M.n > 0) {
+    return (
+      <>
+        {picker}
+        <div className="alert warn">{monthLabel(month)}: مفيش شهر سابق في الشيت للمقارنة، فبتظهر أرقام الشهر وحدها.</div>
+        <section className="kpis">
+          <Kpi title={`عدد المرتجعات — ${monthLabel(month)}`} value={fmt(M.rows)} />
+          <Kpi title="متوسط عمر المرتجع (يوم)" value={f1(M.avg)} tone="brand" sub={`الوسيط ${f1(M.med)} · الأقصى ${fmt(M.max)}`} />
+          <Kpi title="داخل حد الـ SLA" value={limit == null ? '—' : pctOf(M.rate)} tone={limit == null ? '' : 'good'} sub={limit == null ? 'حدّد حد الـ SLA من الإعدادات' : `${fmt(M.within)} من ${fmt(M.n)} · متأخر ${fmt(M.late)}`} />
+        </section>
+        {octCard}
       </>
     );
   }

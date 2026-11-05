@@ -137,6 +137,9 @@ export function ComplaintsOverviewCards() {
   const st = useMemo(() => overviewStats(curC), [curC]);
   const stK = useMemo(() => overviewStats(curK), [curK]);
   const all = useMemo(() => (rows ? overviewStats(rows) : null), [rows]);
+  const OCT = 'أكتوبر';
+  const oct = useMemo(() => (rows ? overviewStats(filterMonth(rows, OCT)) : null), [rows]);
+  const sgn = (v, d = 0) => `${v > 0 ? '+' : ''}${v.toFixed(d)}`;
   const top = useMemo(() => bearerSummary(curK).find((o) => o.amount > 0), [curK]);
   if (error) return <div className="alert err"><b>تعذر تحميل بيانات الشكاوى.</b> {error}</div>;
   if (!rows) return <div className="alert">جاري تحميل بيانات الشكاوى…</div>;
@@ -161,6 +164,12 @@ export function ComplaintsOverviewCards() {
         <Kpi title="الالتزام بـ SLA التحقيق" value={sla(st.resSla)} sub={`متوسط زمن الحل ${f1(st.resSla.avg)} يوم · الهدف ${RES_SLA_TARGET_DAYS} أيام · ${num(st.resSla.count)} حالة`} />
         <Kpi title="الالتزام بـ SLA التعويض" value={sla(st.compSla)} sub={`متوسط زمن التنفيذ ${f1(st.compSla.avg)} يوم · الهدف ${COMP_SLA_TARGET_DAYS} يوم من النتيجة · ${num(st.compSla.count)} حالة`} />
       </section>
+      {monthC !== OCT && oct && oct.total > 0 && (
+        <section className="kpis" style={{ marginTop: 14 }}>
+          <Kpi title={`مقارنة ${monthC} بأكتوبر — عدد الشكاوى`} value={sgn(st.total - oct.total)} tone={st.total <= oct.total ? 'good' : 'bad'} sub={`${num(st.total)} في ${monthC} مقابل ${num(oct.total)} في أكتوبر`} />
+          <Kpi title="مقارنة نسبة قبول التعويض بأكتوبر" value={st.acceptRate === null || oct.acceptRate === null ? '—' : `${sgn(st.acceptRate - oct.acceptRate, 1)} نقطة`} tone={st.acceptRate !== null && oct.acceptRate !== null && st.acceptRate >= oct.acceptRate ? 'good' : 'bad'} sub={`${st.acceptRate === null ? '—' : f1(st.acceptRate)}% مقابل ${oct.acceptRate === null ? '—' : f1(oct.acceptRate)}% في أكتوبر`} />
+        </section>
+      )}
       <div className="sub-row"><h3 className="sub-head">مؤشر التعويضات</h3>{pick(monthK, setMK)}</div>
       <section className="kpis">
         <Kpi title="إجمالي التعويضات (ج.م)" value={num(stK.amount)} sub={`${num(stK.compensated)} حالة بتعويض · كل الشهور ${num(all.amount)}`} />
@@ -169,6 +178,11 @@ export function ComplaintsOverviewCards() {
         <Kpi title="المفقود (شحنة/مرتجع)" value={num(stK.lost.count)} tone={stK.lost.count ? 'bad' : undefined} sub={`تعويض ${num(stK.lost.amount)} ج.م · كل الشهور ${num(all.lost.count)} شكوى`} />
         <Kpi title="التالف (شحنة هالكة)" value={num(stK.damaged.count)} tone={stK.damaged.count ? 'bad' : undefined} sub={`تعويض ${num(stK.damaged.amount)} ج.م · كل الشهور ${num(all.damaged.count)} شكوى`} />
       </section>
+      {monthK !== OCT && oct && oct.total > 0 && (
+        <section className="kpis" style={{ marginTop: 14 }}>
+          <Kpi title={`مقارنة ${monthK} بأكتوبر — إجمالي التعويضات (ج.م)`} value={sgn(stK.amount - oct.amount)} tone={stK.amount <= oct.amount ? 'good' : 'bad'} sub={`${num(stK.amount)} في ${monthK} مقابل ${num(oct.amount)} في أكتوبر`} />
+        </section>
+      )}
     </>
   );
 }
