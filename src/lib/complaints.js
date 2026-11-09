@@ -89,7 +89,6 @@ export function latestMonth(rows) {
 }
 
 // ---- مؤشرات كارت «المؤشرات الرئيسية» (نفس قواعد داش بورد الشكاوى) ----
-export const ACCEPT_TARGET_PCT = 75;   // نسبة قبول التعويض من الحالات المحسومة (≥)
 export const PENDING_TARGET_PCT = 20;  // قيد التحقيق من الإجمالي (≤)
 export const RES_SLA_TARGET_DAYS = 4;  // SLA التحقيق: تاريخ نتيجة التحقيق − تاريخ الإضافة
 export const COMP_SLA_TARGET_DAYS = 2; // SLA التعويض: تاريخ التعويض − تاريخ نتيجة التحقيق
